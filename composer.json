@@ -1,0 +1,29 @@
+{
+  "name": "zealous-creations/tranquil-model-controller",
+  "description": "description",
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "John Wilson",
+      "email": "john@zealouscreations.com"
+    }
+  ],
+  "require": {
+    "laravel/framework": "^10.0",
+    "inertiajs/inertia-laravel": "^0.6",
+    "laravel/sanctum": "^3.0",
+    "doctrine/dbal": "^3.0"
+  },
+  "autoload": {
+    "psr-4": {
+      "Tranquil\\": "src/"
+    }
+  },
+  "extra": {
+    "laravel": {
+      "providers": [
+        "Tranquil\\ServiceProvider"
+      ]
+    }
+  }
+}

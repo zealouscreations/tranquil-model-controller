@@ -1,0 +1,194 @@
+<?php
+
+namespace Tranquil\Models;
+
+use Tranquil\Auth\AuthenticatableUser;
+use Tranquil\Exceptions\UserRoleOptionDoesNotExistException;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Casts\Attribute;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rule;
+
+class TranquilUser extends AuthenticatableUser {
+
+	public const roleOptions = [
+		[
+			'handle'      => 'super',
+			'name'        => 'Super User',
+			'description' => 'Has full access',
+		],
+	];
+
+	protected $guarded = ['id', 'created_at', 'updated_at', 'email_verified_at', 'remember_token'];
+
+	/**
+	 * The attributes that should be hidden for serialization.
+	 *
+	 * @var array<int, string>
+	 */
+	protected $hidden = [
+		'password',
+		'remember_token',
+	];
+
+	/**
+	 * The attributes that should be cast.
+	 *
+	 * @var array<string, string>
+	 */
+	protected $casts = [
+		'email_verified_at' => 'datetime',
+		'roles'             => 'json',
+	];
+
+	public array $validationMessages = [
+		'email.unique' => 'There is already a user with this email',
+	];
+
+	protected static function boot() {
+		parent::boot();
+		static::saving( function( TranquilUser $user ) {
+			if( $user->isDirty( 'password' ) ) {
+				$user->password = Hash::make( $user->password );
+			}
+			if( $user->isDirty( 'password_confirmation' ) ) {
+				unset($user->attributes['password_confirmation']);
+			}
+		} );
+	}
+
+	public function getValidationRules(): array {
+		return [
+			'password' => 'sometimes|required|min:8|confirmed',
+			'email'    => [
+				'required',
+				Rule::unique( 'users' )->ignore( $this->id ),
+			],
+		];
+	}
+
+	public function getDefaultValidationAttributes(): array {
+		$attributes = parent::getDefaultValidationAttributes();
+		if(request()->has('password_confirmation')) {
+			$attributes['password_confirmation'] = request()->password_confirmation;
+		}
+		return $attributes;
+	}
+
+	public function name(): Attribute {
+		return Attribute::make(
+			get: fn($value, $attributes) => $attributes['first_name'].' '.$attributes['last_name']
+		);
+	}
+
+	/**
+	 * @param  string|array  $role
+	 *
+	 * @return bool
+	 */
+	public function hasRole( $role ): bool {
+		return collect( $this->roles )
+				   ->intersect( is_array( $role ) ? $role : [ $role ] )
+				   ->count() > 0;
+	}
+
+	public function hasAllRoles( array $roles ): bool {
+		return ! array_diff( $roles, $this->roles );
+	}
+
+	/**
+	 * @param  string|array  $role
+	 *
+	 * @return void
+	 * @throws UserRoleOptionDoesNotExistException
+	 */
+	public function addRole( $role ) {
+		if ( ! self::hasRoleOption( $role ) ) {
+			throw new UserRoleOptionDoesNotExistException( $role, self::roleOptions );
+		}
+		$this->roles = collect( $this->roles )
+			->merge( is_array( $role ) ? $role : [ $role ] )
+			->unique()
+			->values()
+			->toArray();
+	}
+
+	/**
+	 * @return void
+	 * @throws UserRoleOptionDoesNotExistException
+	 */
+	public function addRoles( array $roles ) {
+		$this->addRole( $roles );
+	}
+
+	/**
+	 * @param  string|array  $role
+	 *
+	 * @return void
+	 */
+	public function removeRole( $role ) {
+		$this->roles = collect( $this->roles )
+			->diff( is_array( $role ) ? $role : [ $role ] )
+			->values()
+			->toArray();
+	}
+
+	public function removeRoles( array $roles ) {
+		$this->removeRole( $roles );
+	}
+
+	/**
+	 * @param  string|array  $roleHandle
+	 *
+	 * @return bool
+	 */
+	public static function hasRoleOption( $roleHandle ): bool {
+		if ( is_array( $roleHandle ) ) {
+			return static::hasAllRoleOptions( $roleHandle );
+		}
+
+		return collect( static::roleOptions )->pluck( 'handle' )->contains( $roleHandle );
+	}
+
+	public static function hasAllRoleOptions( array $roleHandles ): bool {
+		return ! array_diff( $roleHandles, collect( static::roleOptions )->pluck( 'handle' )->toArray() );
+	}
+
+	/**
+	 * whereHasRole($role)
+	 *
+	 * @param Builder $query
+	 * @param string|array $role
+	 * @return void
+	 */
+	public function scopeWhereHasRole( $query, $role ) {
+		$roles = is_array($role) ? $role : [$role];
+		$query->whereJsonContains('roles', array_shift($roles));
+		foreach($roles as $role) {
+			$query->orWhereJsonContains('roles', $role);
+		}
+	}
+
+	/**
+	 * whereHasAllRoles($roles)
+	 *
+	 * @param Builder $query
+	 * @param array $roles
+	 * @return void
+	 */
+	public function scopeWhereHasAllRoles( $query, $roles ) {
+		foreach($roles as $role) {
+			$query->whereJsonContains('roles', $role);
+		}
+	}
+
+	/**
+	 * adminUsers()
+	 *
+	 * @param $query
+	 * @return void
+	 */
+	public function scopeAdminUsers( $query ) {
+		$query->whereHasRole( ['leader'] );
+	}
+}
