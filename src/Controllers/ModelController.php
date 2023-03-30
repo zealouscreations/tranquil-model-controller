@@ -441,10 +441,14 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 						}
 
 						$caseSensitive = $filter['caseSensitive'] ?? false;
-						$operator = !$caseSensitive && ($type == 'string' || $rawColumn) && in_array( $operator, [
-							'like',
-							'=',
-						] ) ? 'ilike' : $operator;
+						if(!$caseSensitive && ($type == 'string' || $rawColumn) && in_array( $operator, [
+								'like',
+								'=',
+							] )) {
+							$operator = 'like';
+							$searchValue = strtolower($searchValue);
+							$column = DB::raw("lower($column)");
+						}
 
 						$this->populateFilterQueryWhereClause( $query, $where, $relation, function( $query ) use ( $column, $operator, $searchValue, $relation, $where ) {
 							$query->{$relation ? 'where' : $where}( $column, $operator, $searchValue );
@@ -455,7 +459,7 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 		}
 	}
 
-	private function populateFilterQueryWhereClause( Builder $query, string $where, string $relation, callable $callback ) {
+	private function populateFilterQueryWhereClause( Builder $query, string $where, ?string $relation, callable $callback ) {
 		if ( $relation ) {
 			$query->{$where . 'Has'}( $relation, function ( $query ) use ( $callback ) {
 				$callback( $query );
