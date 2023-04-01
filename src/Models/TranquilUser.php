@@ -17,6 +17,11 @@ class TranquilUser extends AuthenticatableUser {
 			'name'        => 'Super User',
 			'description' => 'Has full access',
 		],
+		[
+			'handle'      => 'basic',
+			'name'        => 'Basic User',
+			'description' => 'Has limited access',
+		],
 	];
 
 	protected $guarded = ['id', 'created_at', 'updated_at', 'email_verified_at', 'remember_token'];
@@ -48,6 +53,9 @@ class TranquilUser extends AuthenticatableUser {
 	protected static function boot() {
 		parent::boot();
 		static::saving( function( TranquilUser $user ) {
+			if( $user->wasRecentlyCreated && !$user->isDirty( 'roles' ) ) {
+				$user->roles = collect( self::roleOptions )->where( 'handle', 'basic' )->toJson();
+			}
 			if( $user->isDirty( 'password' ) ) {
 				$user->password = Hash::make( $user->password );
 			}
