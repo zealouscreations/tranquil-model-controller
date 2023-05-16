@@ -6,24 +6,22 @@ This package contains base Laravel Eloquent models and controllers that contain 
 
 ## Install
 
-Add this to the `repositories` array in the `composer.json` file:
-
-```json
-{
-  "repositories": [
-    {
-      "type": "vcs",
-      "url": "git@bitbucket.org:zealous-creations/tranquil-model-controller.git"
-    }
-  ]
-}
-```
-
-Then require it with composer
+### Require it with composer
 
 ```shell
 composer require zealous-creations/tranquil-model-controller
 ```
+
+> NOTE: If you have installed `inertiajs/inertia-laravel` lower than `v0.6` or `doctrine/dbal` lower than `v3.0`
+> then you may need to remove them before requiring `zealous-creations/tranquil-model-controller`
+
+   ```shell
+   composer remove inertiajs/inertia-laravel
+   composer remove doctrine/dbal
+   composer require zealous-creations/tranquil-model-controller
+   ```
+
+### Publish migrations
 
 There are 2 migrations in this package for creating a `users` table and an `attachments` table
 
