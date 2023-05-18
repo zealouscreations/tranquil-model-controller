@@ -3,6 +3,10 @@
 namespace Tranquil\Controllers;
 
 use Illuminate\Contracts\Support\Responsable;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
+use Illuminate\Database\Eloquent\Relations\MorphOne;
+use Illuminate\Database\Eloquent\Relations\MorphTo;
+use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Tranquil\Models\Attachment;
 use Tranquil\Models\Concerns\HasAttachments;
 use Tranquil\Models\Concerns\HasColumnSchema;
@@ -117,10 +121,10 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 		$createdAssociatedRelation = false;
 		foreach( $request->input() as $relatedColumn => $input ) {
 			if( is_array( $input ) && method_exists( $model, $relatedColumn ) && is_a( $model->$relatedColumn(), Relation::class ) ) {
-				$hasOne = is_a( $model->$relatedColumn(), HasOne::class );
+				$hasOne = is_a( $model->$relatedColumn(), HasOne::class ) || is_a( $model->$relatedColumn(), MorphTo::class ) || is_a( $model->$relatedColumn(), MorphOne::class );
 				$belongsTo = is_a( $model->$relatedColumn(), BelongsTo::class );
-				$belongsToMany = is_a( $model->$relatedColumn(), BelongsToMany::class );
-				$hasMany = is_a( $model->$relatedColumn(), HasMany::class );
+				$belongsToMany = is_a( $model->$relatedColumn(), BelongsToMany::class ) || is_a( $model->$relatedColumn(), MorphToMany::class );
+				$hasMany = is_a( $model->$relatedColumn(), HasMany::class ) || is_a( $model->$relatedColumn(), MorphMany::class );
 				if( $hasOne || $belongsTo ) {
 					if( isset( $model->$relatedColumn ) ) {
 						$model->$relatedColumn->fill( $input );

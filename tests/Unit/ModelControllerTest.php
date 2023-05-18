@@ -58,6 +58,24 @@ class ModelControllerTest extends TestCase {
 		$testModel = TestControllerBelongsToModel::where('title',  $input['title'])->first();
 		$this->assertEquals($input['testControllerHasOneModel']['title'], $testModel->testControllerHasOneModel->title);
 	}
+	public function test_can_create_a_morph_one_model_when_creating_a_model() {
+		$input = [
+			'title' => 'Test Model',
+			'testControllerMorphOneModel' => [
+				'title' => 'Test Has One Created Model',
+			],
+		];
+		$this->controller->modelClass = TestControllerMorphsToModel::class;
+		$this->controller->store(new Request($input));
+		$this->assertDatabaseHas('test_controller_polymorphic_models', [
+			'title' => $input['testControllerMorphOneModel']['title'],
+		]);
+		$this->assertDatabaseHas('test_controller_morphs_to_models', [
+			'title' => $input['title'],
+		]);
+		$testModel = TestControllerMorphsToModel::where('title',  $input['title'])->first();
+		$this->assertEquals($input['testControllerMorphOneModel']['title'], $testModel->testControllerMorphOneModel->title);
+	}
 
 	public function test_can_update_a_has_one_model_when_updating_a_model() {
 		$testModel = TestControllerBelongsToModel::create([
@@ -86,6 +104,34 @@ class ModelControllerTest extends TestCase {
 		]);
 		$testModel = TestControllerBelongsToModel::where('title',  $input['title'])->first();
 		$this->assertEquals($input['testControllerHasOneModel']['title'], $testModel->testControllerHasOneModel->title);
+	}
+
+	public function test_can_update_a_morph_one_model_when_updating_a_model() {
+		$testModel = TestControllerMorphsToModel::create([
+			'title' => 'Test Model',
+		]);
+		TestControllerPolymorphicModel::create([
+			'title' => 'Test Has One Created Model',
+			'morphable_id' => $testModel->id,
+			'morphable_type' => TestControllerMorphsToModel::class,
+		]);
+
+		$input = [
+			'title' => 'Test Updated Model',
+			'testControllerMorphOneModel' => [
+				'title' => 'Test Updated Has One Model',
+			],
+		];
+		$this->controller->modelClass = TestControllerMorphsToModel::class;
+		$this->controller->save(new Request($input), $testModel->fill($input));
+		$this->assertDatabaseHas('test_controller_polymorphic_models', [
+			'title'       => $input['testControllerMorphOneModel']['title'],
+		]);
+		$this->assertDatabaseHas('test_controller_morphs_to_models', [
+			'title' => $input['title'],
+		]);
+		$testModel = TestControllerMorphsToModel::where('title',  $input['title'])->first();
+		$this->assertEquals($input['testControllerMorphOneModel']['title'], $testModel->testControllerMorphOneModel->title);
 	}
 
 	public function test_can_create_a_belongs_to_model_when_creating_a_model() {
@@ -199,6 +245,24 @@ class ModelControllerTest extends TestCase {
 		$this->assertContains($testBelongsToModel2->id, $testModel->testControllerBelongsToManyModels->pluck('id'));
 	}
 
+	public function test_can_sync_morph_to_many_models_when_creating_a_model() {
+		$testBelongsToModel1 = TestTagModel::create( ['title' => 'Test Belongs To Many Created Model 1']);
+		$testBelongsToModel2 = TestTagModel::create( ['title' => 'Test Belongs To Many Created Model 2']);
+		$input = [
+			'title'       => 'Test Model',
+			'description' => 'Test Model Description',
+			'testTagModels' => [$testBelongsToModel1->toArray(), $testBelongsToModel2->toArray()]
+		];
+
+		$this->controller->modelClass = TestPostModel::class;
+		$this->controller->store(new Request($input));
+
+		$testModel = TestPostModel::where('title',  $input['title'])->first();
+
+		$this->assertContains($testBelongsToModel1->id, $testModel->testTagModels->pluck('id'));
+		$this->assertContains($testBelongsToModel2->id, $testModel->testTagModels->pluck('id'));
+	}
+
 	public function test_can_sync_belongs_to_many_models_when_updating_a_model() {
 		$testModel = TestControllerModel::create([
 			'title'       => 'Test Model',
@@ -238,6 +302,45 @@ class ModelControllerTest extends TestCase {
 		$this->assertNotContains($testBelongsToModel3->id, $testModel->testControllerBelongsToManyModels->pluck('id'));
 	}
 
+	public function test_can_sync_morph_to_many_models_when_updating_a_model() {
+		$testModel = TestPostModel::create([
+			'title' => 'Test Model',
+		]);
+		$testBelongsToModel1 = TestTagModel::create( ['title' => 'Test Belongs To Many Created Model 1']);
+		$testBelongsToModel2 = TestTagModel::create( ['title' => 'Test Belongs To Many Created Model 2']);
+		$this->controller->modelClass = TestPostModel::class;
+		$this->controller->save(new Request([
+			'testTagModels' => [$testBelongsToModel1->toArray(), $testBelongsToModel2->toArray()]
+		]), $testModel);
+		$testModel = $testModel->fresh();
+		$this->assertContains($testBelongsToModel1->id, $testModel->testTagModels->pluck('id'));
+		$this->assertContains($testBelongsToModel2->id, $testModel->testTagModels->pluck('id'));
+
+		$this->controller->save(new Request([
+			'testTagModels' => [$testBelongsToModel2->toArray()]
+		]), $testModel);
+		$testModel = $testModel->fresh();
+		$this->assertNotContains($testBelongsToModel1->id, $testModel->testTagModels->pluck('id'));
+		$this->assertContains($testBelongsToModel2->id, $testModel->testTagModels->pluck('id'));
+
+		$testBelongsToModel3 = TestTagModel::create( ['title' => 'Test Belongs To Many Created Model 3']);
+		$this->controller->save(new Request([
+			'testTagModels' => [$testBelongsToModel3->toArray()]
+		]), $testModel);
+		$testModel = $testModel->fresh();
+		$this->assertNotContains($testBelongsToModel1->id, $testModel->testTagModels->pluck('id'));
+		$this->assertNotContains($testBelongsToModel2->id, $testModel->testTagModels->pluck('id'));
+		$this->assertContains($testBelongsToModel3->id, $testModel->testTagModels->pluck('id'));
+
+		$this->controller->save(new Request([
+			'testTagModels' => []
+		]), $testModel);
+		$testModel = $testModel->fresh();
+		$this->assertNotContains($testBelongsToModel1->id, $testModel->testTagModels->pluck('id'));
+		$this->assertNotContains($testBelongsToModel2->id, $testModel->testTagModels->pluck('id'));
+		$this->assertNotContains($testBelongsToModel3->id, $testModel->testTagModels->pluck('id'));
+	}
+
 	public function test_can_create_has_many_models_when_creating_a_model() {
 		$input = [
 			'title'       => 'Test Model',
@@ -268,6 +371,34 @@ class ModelControllerTest extends TestCase {
 		$testModel = TestControllerBelongsToModel::where('title',  $input['title'])->first();
 		$this->assertCount(2, $testModel->testControllerHasManyModels);
 		$this->assertEquals($input['testControllerHasManyModels'][0]['title'], $testModel->testControllerHasManyModels->first()->title);
+	}
+
+	public function test_can_create_morph_many_models_when_creating_a_model() {
+		$input = [
+			'title'       => 'Test Model',
+			'testControllerMorphManyModels' => [
+				[
+					'title' => 'Test Has Many Created Model 1',
+				],
+				[
+					'title' => 'Test Has Many Created Model 2',
+				],
+			],
+		];
+		$this->controller->modelClass = TestControllerMorphsToModel::class;
+		$this->controller->store(new Request($input));
+		$this->assertDatabaseHas( 'test_controller_polymorphic_models', [
+			'title' => $input['testControllerMorphManyModels'][0]['title'],
+		] );
+		$this->assertDatabaseHas( 'test_controller_polymorphic_models', [
+			'title' => $input['testControllerMorphManyModels'][1]['title'],
+		] );
+		$this->assertDatabaseHas('test_controller_morphs_to_models', [
+			'title' => $input['title'],
+		]);
+		$testModel = TestControllerMorphsToModel::where('title',  $input['title'])->first();
+		$this->assertCount(2, $testModel->testControllerMorphManyModels);
+		$this->assertEquals($input['testControllerMorphManyModels'][0]['title'], $testModel->testControllerMorphManyModels->first()->title);
 	}
 
 	public function test_can_update_has_many_models_when_updating_a_model() {
@@ -307,6 +438,40 @@ class ModelControllerTest extends TestCase {
 		]);
 		$testModel = TestControllerBelongsToModel::where('title',  $input['title'])->first();
 		$this->assertEquals($input['testControllerHasManyModels'][0]['title'], $testModel->testControllerHasManyModels->first()->title);
+	}
+
+	public function test_can_update_morph_many_models_when_updating_a_model() {
+		$testModel = TestControllerMorphsToModel::create([
+			'title' => 'Test Model',
+		]);
+		$testModel->testControllerMorphManyModels()->createMany( [
+			[
+				'title' => 'Test Has Many Created Model 1',
+			],
+			[
+				'title' => 'Test Has Many Created Model 2',
+			],
+		] );
+		$input = [
+			'title' => 'Test Updated Model',
+			'testControllerMorphManyModels' => $testModel->testControllerMorphManyModels->map(function($hasManyModel) {
+				$hasManyModel->title = 'Test Updated Belongs To Model '.$hasManyModel->id;
+				return $hasManyModel;
+			})->toArray()
+		];
+		$this->controller->modelClass = TestControllerMorphsToModel::class;
+		$this->controller->save(new Request($input), $testModel->fill($input));
+		$this->assertDatabaseHas('test_controller_polymorphic_models', [
+			'title'       => $input['testControllerMorphManyModels'][0]['title'],
+		]);
+		$this->assertDatabaseHas('test_controller_polymorphic_models', [
+			'title'       => $input['testControllerMorphManyModels'][1]['title'],
+		]);
+		$this->assertDatabaseHas('test_controller_morphs_to_models', [
+			'title' => $input['title'],
+		]);
+		$testModel = TestControllerMorphsToModel::where('title',  $input['title'])->first();
+		$this->assertEquals($input['testControllerMorphManyModels'][0]['title'], $testModel->testControllerMorphManyModels->first()->title);
 	}
 
 	public function test_can_redirect_to_specified_route_after_delete() {
@@ -872,5 +1037,39 @@ class TestControllerBelongsToModel extends TranquilModel {
 	}
 	public function testControllerHasManyModels() {
 		return $this->hasMany(TestControllerModel::class, 'test_controller_belongs_to_model_id');
+	}
+}
+
+class TestControllerPolymorphicModel extends TranquilModel {
+	public $timestamps = false;
+	public function morphable() {
+		return $this->morphTo();
+	}
+}
+
+class TestControllerMorphsToModel extends TranquilModel {
+	public $timestamps = false;
+	protected $fillable = ['title'];
+	public function testControllerMorphOneModel() {
+		return $this->morphOne(TestControllerPolymorphicModel::class, 'morphable');
+	}
+	public function testControllerMorphManyModels() {
+		return $this->morphMany(TestControllerPolymorphicModel::class, 'morphable');
+	}
+}
+
+class TestTagModel extends TranquilModel {
+	public $timestamps = false;
+	protected $fillable = ['title'];
+
+	public function testPostModels() {
+		return $this->morphedByMany( TestPostModel::class, 'taggable' );
+	}
+}
+class TestPostModel extends TranquilModel {
+	public $timestamps = false;
+	protected $fillable = ['title'];
+	public function testTagModels() {
+		return $this->morphToMany( TestTagModel::class, 'taggable' );
 	}
 }
