@@ -49,9 +49,11 @@ class Attachment extends TranquilModel {
 
 	public function url(): Attribute {
 		return Attribute::make(
-			get:fn( $value, $attributes ) => Storage::disk( 's3' )->temporaryUrl( $attributes['file_path'], now()->addMinutes( 10 ), [
-				'ResponseContentDisposition' => "attachment; filename={$attributes['file_name']}",
-			] )
+			get:fn( $value, $attributes ) => config( 'filesystems.default' ) == 's3'
+				? Storage::disk( 's3' )->temporaryUrl( $attributes['file_path'], now()->addMinutes( 10 ), [
+					'ResponseContentDisposition' => "attachment; filename={$attributes['file_name']}",
+				] )
+				: Storage::url( $attributes['file_path'] )
 		);
 	}
 
@@ -76,7 +78,7 @@ class Attachment extends TranquilModel {
 	public function storeFile( UploadedFile $file ) {
 		$this->file_name = $file->getClientOriginalName();
 		$this->file_size = $file->getSize();
-		$this->file_path = $file->store( 'attachments', 's3' );
+		$this->file_path = $file->store( 'attachments' );
 		$this->save();
 		$this->fresh();
 	}
