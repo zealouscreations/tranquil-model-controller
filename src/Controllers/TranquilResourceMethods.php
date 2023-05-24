@@ -39,7 +39,7 @@ trait TranquilResourceMethods {
 	 * Show the form for editing the specified resource.
 	 */
 	public function edit( mixed $model ): Responsable {
-		return $this->getResponse( 'edit', $this->loadModel( $model ) );
+		return $this->getResponse( 'edit', $this->loadRelations( $this->loadModel( $model ) ) );
 	}
 
 	/**
