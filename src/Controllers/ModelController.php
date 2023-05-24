@@ -519,9 +519,10 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 		$parameters = $this->getCreateEditParameters();
 		if( !count( $parameters ) ) {
 			$columns = $model
-				? $model->toArray
+				? $model->makeHidden( ['created_at', 'updated_at', 'deleted_at', 'created_by', 'updated_by', 'deleted_by'] )
+						->toArray()
 				: $this->modelClass::getColumns()
-					->except( ['id', 'slug', 'created_at', 'updated_at', 'deleted_at', 'created_by', 'updated_by', 'deleted_by'] )
+					->except( ['id', 'slug', 'created_at', 'updated_at', 'deleted_at', 'created_by', 'updated_by', 'deleted_by', 'remember_token', 'email_verified_at'] )
 					->mapWithKeys( fn( $item, $key ) => [$key => null] )
 					->toArray();
 			$parameters = [Str::camel( class_basename( $this->modelClass ) ) => $columns];
