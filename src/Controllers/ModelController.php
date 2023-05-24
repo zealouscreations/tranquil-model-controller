@@ -34,6 +34,7 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 
 	public Builder|Relation $modelQuery;
 
+	public array $responseTypeParameters = [];
 	public array $createEditParameters = [];
 
 	public function __construct() {
@@ -57,9 +58,13 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 	}
 
 	public function getResponseParameters( $type, $model, $parameters ): array {
-		$parameters = array_merge( $parameters, $this->getModelPolicyParameters( $model ?? new $this->modelClass() ) );
+		$parameters = array_merge(
+			$parameters,
+			$this->getResponseTypeParameters( $type ),
+			$this->getModelPolicyParameters( $model ?? new $this->modelClass() )
+		);
 		if( in_array( $type, ['create', 'edit'] ) ) {
-			$parameters = array_merge( $parameters, $this->getCreateEditParameters() );
+			$parameters = array_merge( $parameters, $this->getCreateEditParametersWithModel( $model ) );
 		}
 
 		return $parameters;
@@ -502,8 +507,27 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 		}
 	}
 
+	public function getResponseTypeParameters( $type ): array {
+		return $this->responseTypeParameters[ $type ] ?? [];
+	}
+
 	public function getCreateEditParameters(): array {
 		return $this->createEditParameters;
+	}
+
+	public function getCreateEditParametersWithModel( $model = null ): array {
+		$parameters = $this->getCreateEditParameters();
+		if( !count( $parameters ) ) {
+			$columns = $model
+				? $model->toArray
+				: $this->modelClass::getColumns()
+					->except( ['id', 'slug', 'created_at', 'updated_at', 'deleted_at', 'created_by', 'updated_by', 'deleted_by'] )
+					->mapWithKeys( fn( $item, $key ) => [$key => null] )
+					->toArray();
+			$parameters = [Str::camel( class_basename( $this->modelClass ) ) => $columns];
+		}
+
+		return $parameters;
 	}
 
 	public function getRouteNameForAction( $modelClass, $action ): string {
