@@ -34,7 +34,12 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 
 	public Builder|Relation $modelQuery;
 
-	public array $responseTypeParameters = [];
+	public array $defaultResponseParameters = [
+		'index'  => [],
+		'show'   => [],
+		'create' => [],
+		'edit'   => [],
+	];
 	public array $createEditParameters = [];
 
 	public function __construct() {
@@ -60,7 +65,7 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 	public function getResponseParameters( $type, $model, $parameters ): array {
 		$parameters = array_merge(
 			$parameters,
-			$this->getResponseTypeParameters( $type ),
+			$this->getResponseParametersForType( $type ),
 			$this->getModelPolicyParameters( $model ?? new $this->modelClass() )
 		);
 		if( in_array( $type, ['create', 'edit'] ) ) {
@@ -507,8 +512,12 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 		}
 	}
 
-	public function getResponseTypeParameters( $type ): array {
-		return $this->responseTypeParameters[ $type ] ?? [];
+	public function getDefaultResponseParameters(): array {
+		return $this->defaultResponseParameters;
+	}
+
+	public function getResponseParametersForType( $type ): array {
+		return $this->getDefaultResponseParameters()[ $type ] ?? [];
 	}
 
 	public function getCreateEditParameters(): array {
