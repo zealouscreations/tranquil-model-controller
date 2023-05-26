@@ -517,7 +517,8 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 	}
 
 	public function getResponseParametersForType( $type ): array {
-		return $this->getDefaultResponseParameters()[ $type ] ?? [];
+		$defaultResponseParameters = $this->getDefaultResponseParameters();
+		return $defaultResponseParameters[ $type ] ?? $defaultResponseParameters;
 	}
 
 	public function getCreateEditParameters(): array {
