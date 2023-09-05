@@ -88,14 +88,14 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 		if ( in_array( HasValidation::class, class_uses_recursive( $model ) ) && !$model->validateOnSave ) {
 			$model->validate();
 		}
-		$this->saveRelations( $request, $model );
+		$this->saveRelations( $request->input(), $model );
 		$model->save();
 		$this->saveAttachments( $request, $model );
 
 		session()->flash('message', $model->wasRecentlyCreated ? 'Created' : 'Saved');
 		return $model->wasRecentlyCreated
-			? $this->stored( $model )
-			: $this->saved( $model );
+			? $this->stored( $model->fresh() )
+			: $this->saved( $model->fresh() );
 	}
 
 	public function stored( Model $model ): bool|JsonResponse|Responsable|\Illuminate\Http\RedirectResponse {
@@ -105,31 +105,31 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 	public function saved( Model $model ): bool|JsonResponse|Responsable|\Illuminate\Http\RedirectResponse {
 		$request = request();
 		if( !$request->header( 'X-Inertia' ) && ($request->expectsJson() || !method_exists($this->modelClass, 'show')) ) {
-			return $this->apiResponse( true, [ Str::camel(class_basename( $model )) => $model->fresh() ] );
+			return $this->apiResponse( true, [ Str::camel(class_basename( $model )) => $model ] );
 		}
 		$routeName = $this->getRouteNameForAction( get_class($model), 'show');
-		$redirect = $this->redirectResponse( request(), $model->fresh() ) ?: (
+		$redirect = $this->redirectResponse( request(), $model ) ?: (
 			Route::has( $routeName )
-				? redirect()->route( $routeName, [Str::camel( class_basename( $model ) ) => $model->fresh()] )
+				? redirect()->route( $routeName, [Str::camel( class_basename( $model ) ) => $model] )
 				: false
 		);
 
 		return $redirect ?: (
 			method_exists( $this, 'show' )
-				? $this->show( $model->fresh() )
-				: $this->showResponse( $model->fresh() )
+				? $this->show( $model )
+				: $this->showResponse( $model )
 			);
 	}
 
 	/**
 	 * Saves related models that are included in the request
 	 */
-	public function saveRelations( Request $request, Model $model ) {
+	public function saveRelations( array $inputs, Model $model ): void {
 		$relationsToCreate = [];
 		$relationsToUpdateOrCreate = [];
 		$relationsToSync = [];
 		$createdAssociatedRelation = false;
-		foreach( $request->input() as $relatedColumn => $input ) {
+		foreach( $inputs as $relatedColumn => $input ) {
 			if( is_array( $input ) && method_exists( $model, $relatedColumn ) && is_a( $model->$relatedColumn(), Relation::class ) ) {
 				$hasOne = is_a( $model->$relatedColumn(), HasOne::class ) || is_a( $model->$relatedColumn(), MorphTo::class ) || is_a( $model->$relatedColumn(), MorphOne::class );
 				$belongsTo = is_a( $model->$relatedColumn(), BelongsTo::class );
@@ -153,6 +153,7 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 							if( $relatedModel ) {
 								$model->$relatedColumn()->associate( $relatedModel );
 								$createdAssociatedRelation = true;
+								$this->saveRelations( $input, $relatedModel );
 							}
 						}
 					}
@@ -189,7 +190,8 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 			$relatedColumn = $relation['relatedColumn'];
 			$foreignKey = $model->$relatedColumn()->getForeignKeyName();
 			$relation['input'][ $foreignKey ] = $model->getKey();
-			$model->$relatedColumn()->create( $relation['input'] );
+			$relatedModel = $model->$relatedColumn()->create( $relation['input'] );
+			$this->saveRelations( $relation['input'], $relatedModel );
 		}
 		foreach($relationsToUpdateOrCreate as $relation) {
 			$relatedColumn = $relation['relatedColumn'];
@@ -197,7 +199,8 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 			if( isset( $relation['foreignKey'] ) ) {
 				$input[ $relation['foreignKey'] ] = $model->getKey();
 			}
-			$model->$relatedColumn()->updateOrCreate( ['id' => $input['id'] ?? null], $input );
+			$relatedModel = $model->$relatedColumn()->updateOrCreate( ['id' => $input['id'] ?? null], $input );
+			$this->saveRelations( $input, $relatedModel );
 		}
 		foreach($relationsToSync as $relation) {
 			$relatedColumn = $relation['relatedColumn'];

@@ -27,7 +27,7 @@ class Controller extends BaseController implements ResourceResponsesInterface {
 
 		return $request->redirectUrl
 			? redirect( $request->redirectUrl )
-			: redirect()->route( $request->redirectRoute, $request->redirectParameters ?? ( $model ? [Str::camel( class_basename( $model ) ) => $model->fresh()] : [] ) );
+			: redirect()->route( $request->redirectRoute, $request->redirectParameters ?? ( $model ? [Str::camel( class_basename( $model ) ) => $model] : [] ) );
 	}
 
 	public function indexResponse( string $modelClass, $parameters = [] ): Responsable|JsonResponse {
