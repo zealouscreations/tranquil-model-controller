@@ -139,6 +139,7 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 					if( isset( $model->$relatedColumn ) ) {
 						$model->$relatedColumn->fill( $input );
 						$model->$relatedColumn->save();
+						$this->saveRelations( $input, $model->$relatedColumn );
 					} else {
 						if( $hasOne ) {
 							$relationsToCreate[] = compact('relatedColumn', 'input');
