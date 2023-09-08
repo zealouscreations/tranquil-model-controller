@@ -88,10 +88,11 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 		if ( in_array( HasValidation::class, class_uses_recursive( $model ) ) && !$model->validateOnSave ) {
 			$model->validate();
 		}
-		$this->saveRelations( $request->input(), $model );
-		$model->save();
-		$this->saveAttachments( $request, $model );
-
+		DB::transaction( function() use ( $request, $model ) {
+			$this->saveRelations( $request->input(), $model );
+			$model->save();
+			$this->saveAttachments( $request, $model );
+		} );
 		session()->flash('message', $model->wasRecentlyCreated ? 'Created' : 'Saved');
 		return $model->wasRecentlyCreated
 			? $this->stored( $model->fresh() )
