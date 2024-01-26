@@ -386,7 +386,7 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 				$rawColumn = isset($filter['rawColumn']);
 				$column = $rawColumn ? DB::raw($filter['rawColumn']) : $filter['column'];
 				$relation = null;
-				$lastDotPosition = strrpos( $column, '.' );
+				$lastDotPosition = $rawColumn ? null : strrpos( $column, '.' );
 				if ( !$rawColumn && $lastDotPosition ) {
 					// One level deep relation search 'relationName.column_name'
 					$relation = substr( $column, 0, $lastDotPosition );
@@ -446,26 +446,20 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 								break;
 							default:
 								if( $operator == 'like' ) {
-									$searchValue = (in_array( $filter['operator'], [
-											'endsWith',
-											'contains',
-											'like',
-										] ) ? '%' : '')
-												   .$searchValue.
-												   (in_array( $filter['operator'], [
-													   'startsWith',
-													   'contains',
-													   'like',
-												   ] ) ? '%' : '');
+									$searchValue =
+										(in_array( $filter['operator'], ['endsWith', 'contains', 'like'] ) ? '%' : '')
+										.$searchValue.
+										(in_array( $filter['operator'], ['startsWith', 'contains', 'like'] ) ? '%' : '');
 								}
 								break;
 						}
 
 						$caseSensitive = $filter['caseSensitive'] ?? false;
-						if(!$caseSensitive && ($type == 'string' || $rawColumn) && in_array( $operator, [
-								'like',
-								'=',
-							] )) {
+						if(!$caseSensitive
+						   && $type == 'string'
+						   && !$rawColumn
+						   && in_array( $operator, ['like', '='] )
+						) {
 							$operator = 'like';
 							$searchValue = strtolower($searchValue);
 							$column = DB::raw("lower($column)");
