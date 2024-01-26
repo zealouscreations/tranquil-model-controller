@@ -52,10 +52,12 @@ class TranquilUser extends AuthenticatableUser {
 
 	protected static function boot() {
 		parent::boot();
-		static::saving( function( TranquilUser $user ) {
-			if( $user->wasRecentlyCreated && !$user->isDirty( 'roles' ) ) {
-				$user->roles = collect( self::roleOptions )->where( 'handle', 'basic' )->toJson();
+		static::creating( function( TranquilUser $user ) {
+			if( empty( $user->roles ) ) {
+				$user->roles = ['basic'];
 			}
+		} );
+		static::saving( function( TranquilUser $user ) {
 			if( $user->isDirty( 'password' ) ) {
 				$user->password = Hash::make( $user->password );
 			}

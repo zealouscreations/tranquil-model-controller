@@ -11,7 +11,7 @@ use Tranquil\Models\Attachment;
 use Tranquil\Models\Concerns\HasAttachments;
 use Tranquil\Models\Concerns\HasColumnSchema;
 use Tranquil\Models\Concerns\HasValidation;
-use Tranquil\Models\TranquilUser as User;
+use Tranquil\Models\TranquilUser;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
@@ -31,6 +31,7 @@ use Illuminate\Support\Str;
 class ModelController extends Controller implements ResourceResponsesInterface {
 
 	public string $modelClass;
+	public string $userClass = TranquilUser::class;
 
 	public Builder|Relation $modelQuery;
 
@@ -187,6 +188,7 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 		}
 		if( $createdAssociatedRelation || (!$model->exists && count( $relationsToCreate ) + count( $relationsToUpdateOrCreate ) + count( $relationsToSync ) > 0) ) {
 			$model->save();
+			$model->wasRecentlyCreated = false;
 		}
 		foreach($relationsToCreate as $relation) {
 			$relatedColumn = $relation['relatedColumn'];
@@ -496,7 +498,6 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 		if( !$this->modelHasPolicy( $model ) ) {
 			return [];
 		}
-		/** @var User $user */
 		$user = Auth::user();
 		$modelBaseName = class_basename( get_class( $model ) );
 		$policyMethods = collect( get_class_methods( 'App\\Policies\\'.class_basename( get_class( $model ) ).'Policy' ) )
@@ -511,7 +512,7 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 	}
 
 	public function checkModelPolicy( Model $model, $action ) {
-		$user = Auth::user() ? Auth::user() : new User();
+		$user = Auth::user() ? Auth::user() : new $this->userClass();
 		if ( $this->modelHasPolicy( $model ) && $user->cannot( $action, $model ) ) {
 			abort( 403 );
 		}
