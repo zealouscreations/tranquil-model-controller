@@ -42,6 +42,9 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 		'edit'   => [],
 	];
 	public array $createEditParameters = [];
+	public string $createdFlashMessage = 'Created';
+	public string $savedFlashMessage = 'Saved';
+	public string $deletedFlashMessage = 'Deleted';
 
 	public function __construct() {
 		if( !isset( $this->modelClass ) ) {
@@ -94,7 +97,7 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 			$model->save();
 			$this->saveAttachments( $request, $model );
 		} );
-		session()->flash('message', $model->wasRecentlyCreated ? 'Created' : 'Saved');
+		session()->flash('message', $model->wasRecentlyCreated ? $this->createdFlashMessage : $this->savedFlashMessage);
 		return $model->wasRecentlyCreated
 			? $this->stored( $model->fresh() )
 			: $this->saved( $model->fresh() );
@@ -255,7 +258,7 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 			return $this->redirectResponse( $request )
 				?: $this->apiResponse( true );
 		}
-		session()->flash('message', 'Deleted');
+		session()->flash('message', $this->deletedFlashMessage);
 		return $this->redirectResponse( $request )
 			?: $this->removed( $request );
 	}
@@ -317,7 +320,7 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 		if($request->where){
 			$query->where($request->where);
 		}
-		$records = $query->get();
+		$records = $this->retrieveRecordsFromQuery( $query );
 		$total = $records->count();
 		$records = $this->sortRecords( $records, $request );
 		$records = $records
@@ -326,6 +329,10 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 			->values()
 			->all();
 		return compact( 'total', 'records' );
+	}
+
+	public function retrieveRecordsFromQuery( Builder $query ): Collection {
+		return $query->get();
 	}
 
 	public function sortRecords( Collection $records, Request $request ): Collection {
