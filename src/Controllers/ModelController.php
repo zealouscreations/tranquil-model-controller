@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Tranquil\Models\Attachment;
 use Tranquil\Models\Concerns\HasAttachments;
 use Tranquil\Models\Concerns\HasColumnSchema;
+use Tranquil\Models\Concerns\HasPolicy;
 use Tranquil\Models\Concerns\HasValidation;
 use Tranquil\Models\TranquilUser;
 use Illuminate\Database\Eloquent\Builder;
@@ -31,9 +32,12 @@ use Illuminate\Support\Str;
 class ModelController extends Controller implements ResourceResponsesInterface {
 
 	public string $modelClass;
-	public string $userClass = TranquilUser::class;
 
 	public Builder|Relation $modelQuery;
+
+	public array $loadRelations = [];
+	public bool $loadPolices = true;
+	public array $loadablePolicyRelations = [];
 
 	public array $defaultResponseParameters = [
 		'index'  => [],
@@ -62,15 +66,33 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 		};
 		$this->checkModelPolicy( $model ?? new $this->modelClass(), $policyType );
 
+		if( isset( $model ) ) {
+			$model = $this->loadModelRelations( $model );
+		}
+		if( $this->canLoadPolices( $model ?? new $this->modelClass() ) ) {
+			if( isset( $model ) ) {
+				$model->appendPolicies( array_intersect( $this->loadRelations, $this->loadablePolicyRelations ) );
+			}
+			if( $type == 'index' ) {
+				$parameters['canCreate'] = auth()->user()->can( 'create', $model ?? new $this->modelClass() );
+			}
+		}
 
 		return $this->{$type.'Response'}( $model ?? $this->modelClass, $this->getResponseParameters( $type, $model, $parameters ) );
+	}
+
+	protected function loadModelRelations( Model $model ): Model {
+		if( count( $this->loadRelations ) ) {
+			$model->load( $this->loadRelations );
+		}
+
+		return $model;
 	}
 
 	public function getResponseParameters( $type, $model, $parameters ): array {
 		$parameters = array_merge(
 			$parameters,
 			$this->getResponseParametersForType( $type ),
-			$this->getModelPolicyParameters( $model ?? new $this->modelClass() )
 		);
 		if( in_array( $type, ['create', 'edit'] ) ) {
 			$parameters = array_merge( $parameters, $this->getCreateEditParametersWithModel( $model ) );
@@ -284,55 +306,97 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 		return static::apiResponse( true, [ Str::camel( Str::singular( $model->getTable() ) ) => $model->load( $request->relations ?? [] ) ] );
 	}
 
+	/**
+	 * @deprecated Use getModelRecordsQuery
+	 */
 	public function getModelQuery( Request $request ): Relation|Builder {
-		if ( isset($this->modelQuery) ) {
-			return $this->modelQuery->with( $request->relations ?? [] );
-		}
-
-		return $this->modelClass::with( $request->relations ?? [] );
+		return $this->getModelRecordsQuery( $request );
 	}
 
 	/**
-	 * Retrieve a list of records for the model
+	 * Retrieve the Model query Builder for fetching the model records
 	 *
 	 * Optional request parameters:
-	 * $request->relations -- array -- for eager loading related models
 	 * $request->select -- string|array -- for selecting specific columns
-	 * $request->orderBy -- string -- for ordering list by column(s)
-	 * $request->offset -- int -- the index at which to start the list from
-	 * $request->limit -- int -- the maximum number of records to return
+	 * $request->search -- array -- see notes on the addQueryFilters method
+	 * $request->orderBy -- string -- for ordering records by column(s)
+	 * $request->where -- array -- a single where clause to add to the query Builder
+	 * $request->relations -- array -- for eager loading related models
+	 */
+	public function getModelRecordsQuery( Request $request ): Relation|Builder {
+		if( isset( $this->modelQuery ) ) {
+			return $this->modelQuery;
+		}
+
+		$query = $this->modelClass::query();
+
+		if( $request->select ) {
+			$query->select( $request->select );
+		}
+		if( $request->search ) {
+			$this->addQueryFilters( $query, $request->search );
+		}
+		if( $request->orderBy ) {
+			$query->orderByRaw( $request->orderBy );
+		}
+		if( $request->where ) {
+			$query->where( $request->where );
+		}
+		$relations = $request->relations ?? $this->loadRelations;
+		if( count( $relations ) ) {
+			$query->with( $relations );
+		}
+
+		return $query;
+	}
+
+	/**
+	 * Return and api response with a list of records for the model and the total count
+	 *
+	 * See notes on the getRecords method for optional request parameters
 	 */
 	public function list( Request $request ): JsonResponse {
 		return $this->apiResponse( true, $this->getRecords( $request ) );
 	}
 
+	/**
+	 * Retrieve a list of records for the model and the total count
+	 *
+	 * Optional request parameters for the query Builder (see getModelRecordsQuery method):
+	 * $request->select -- string|array -- for selecting specific columns
+	 * $request->search -- array -- see notes on the addQueryFilters method
+	 * $request->orderBy -- string -- for ordering records by column(s)
+	 * $request->where -- array -- a single where clause to add to the query Builder
+	 * $request->relations -- array -- for eager loading related models
+	 *
+	 * Optional request parameters for the Collection returned from the query Builder:
+	 * $request->sortBy -- string -- for ordering list by column(s) via the returned Collection from the query Builder
+	 * $request->descending -- bool -- (default=false) used with $request->sortBy to set the sort direction
+	 * $request->offset -- int -- the index at which to start the list from
+	 * $request->limit -- int -- the maximum number of records to return
+	 */
 	public function getRecords( Request $request ): array {
-		$query = $this->getModelQuery( $request );
-		if ( $request->select ) {
-			$query->select( $request->select );
-		}
-		if ( $request->search ) {
-			$this->addQueryFilters( $query, $request->search );
-		}
-		if ( $request->orderBy ) {
-			$query->orderByRaw( $request->orderBy );
-		}
-		if($request->where){
-			$query->where($request->where);
-		}
-		$records = $this->retrieveRecordsFromQuery( $query );
+		$query = $this->getModelRecordsQuery( $request );
+		$records = $this->getRecordsFromQuery( $query );
 		$total = $records->count();
 		$records = $this->sortRecords( $records, $request );
 		$records = $records
 			->slice( $request['offset'] ?: 0 )
 			->take( $request['limit'] ?: 200 )
-			->values()
-			->all();
+			->values();
+		if( $records->count() && $this->canLoadPolices( $records->first() ) ) {
+			$relations = array_intersect( $request->relations ?? $this->loadRelations, $this->loadablePolicyRelations );
+			$records = $records->map->appendPolicies( $relations );
+		}
+		$records = $records->all();
+
 		return compact( 'total', 'records' );
 	}
 
-	public function retrieveRecordsFromQuery( Builder $query ): Collection {
-		return $query->get();
+	public function getRecordsFromQuery( Builder $query ): Collection {
+		return $this->modelUsesPolicy( new $this->modelClass() )
+			? $query->whereCan( 'view' )
+			: $query->get();
 	}
 
 	public function sortRecords( Collection $records, Request $request ): Collection {
@@ -495,28 +559,19 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 		return class_exists( 'App\\Policies\\' . class_basename( get_class( $model ) ) . 'Policy' );
 	}
 
-	public function getModelPolicyParameters( Model $model ): array {
-		if( !$this->modelHasPolicy( $model ) ) {
-			return [];
-		}
-		$user = Auth::user();
-		$modelBaseName = class_basename( get_class( $model ) );
-		$policyMethods = collect( get_class_methods( 'App\\Policies\\'.class_basename( get_class( $model ) ).'Policy' ) )
-			->diff( ['before', 'allow', 'deny'] );
-		return [
-			Str::camel( $modelBaseName ).'Policy' => [
-				'can' => $policyMethods->mapWithKeys( function( $action ) use ( $user, $model ) {
-					return [$action => $user && $user->can( $action, $model )];
-				} ),
-			],
-		];
-	}
-
 	public function checkModelPolicy( Model $model, $action ) {
-		$user = Auth::user() ? Auth::user() : new $this->userClass();
+		$user = Auth::user() ?? new (config( 'auth.providers.users.model', TranquilUser::class ))();
 		if ( $this->modelHasPolicy( $model ) && $user->cannot( $action, $model ) ) {
 			abort( 403 );
 		}
+	}
+
+	public function modelUsesPolicy( Model $model ): bool {
+		return in_array( HasPolicy::class, class_uses_recursive( get_class( $model ) ) );
+	}
+
+	public function canLoadPolices( Model $model ): bool {
+		return $this->loadPolices && $this->modelUsesPolicy( $model );
 	}
 
 	public function getDefaultResponseParameters(): array {

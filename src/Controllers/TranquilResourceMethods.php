@@ -10,8 +10,6 @@ use Illuminate\Support\Str;
 
 trait TranquilResourceMethods {
 
-	public array $loadRelations = [];
-
 	/**
 	 * Display a listing of the resource.
 	 */
@@ -32,14 +30,14 @@ trait TranquilResourceMethods {
 	 * Display the specified resource.
 	 */
 	public function show( mixed $model ): Responsable {
-		return $this->getResponse( 'show', $this->loadRelations( $this->loadModel( $model ) ) );
+		return $this->getResponse( 'show', $this->loadModel( $model ) );
 	}
 
 	/**
 	 * Show the form for editing the specified resource.
 	 */
 	public function edit( mixed $model ): Responsable {
-		return $this->getResponse( 'edit', $this->loadRelations( $this->loadModel( $model ) ) );
+		return $this->getResponse( 'edit', $this->loadModel( $model ) );
 	}
 
 	/**
@@ -74,13 +72,5 @@ trait TranquilResourceMethods {
 
 	protected function loadModel( $model ): Model {
 		return is_a( $model, Model::class ) ? $model : $this->modelClass::findOrFail( $model );
-	}
-
-	protected function loadRelations( Model $model ): Model {
-		if( count( $this->loadRelations ) ) {
-			$model->load( $this->loadRelations );
-		}
-
-		return $model;
 	}
 }
