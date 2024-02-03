@@ -35,8 +35,25 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 
 	public Builder|Relation $modelQuery;
 
+	/**
+	 * An array of relations to eager load on the model
+	 * Can optionally specify relations per response type - e.g. ['index' => ['profile'], 'show' => ['profile.address']]
+	 */
 	public array $loadRelations = [];
+
+	/**
+	 * An array of mutated attributes to append on the model
+	 * Can optionally specify relations per response type - e.g. ['index' => ['fullName'], 'show' => ['fullName', 'fullAddress']]
+	 */
+	public array $loadAppends = [];
+
 	public bool $loadPolices = true;
+
+	/**
+	 * An array of relations that should get the policy appended to
+	 * This will only apply to relations that are eager loaded on the model
+	 * Can optionally specify relations per response type - e.g. ['index' => ['profile'], 'show' => ['profile.address']]
+	 */
 	public array $loadablePolicyRelations = [];
 
 	public array $defaultResponseParameters = [
@@ -56,34 +73,41 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 		}
 	}
 
-	public function getResponse( $type, $model = null, $parameters = [] ) {
-		$policyType = match ($type) {
+	public function getResponse( string $type, $model = null, $parameters = [] ) {
+		$action = match ($type) {
 			'index' => 'viewAny',
 			'create' => 'create',
 			'show' => 'view',
 			'edit' => 'update',
 			default => null,
 		};
-		$this->checkModelPolicy( $model ?? new $this->modelClass(), $policyType );
+		$this->checkModelPolicy( $model ?? new $this->modelClass(), $action );
 
-		if( isset( $model ) ) {
-			$model = $this->loadModelRelations( $model );
-		}
-		if( $this->canLoadPolices( $model ?? new $this->modelClass() ) ) {
-			if( isset( $model ) ) {
-				$model->appendPolicies( array_intersect( $this->loadRelations, $this->loadablePolicyRelations ) );
-			}
-			if( $type == 'index' ) {
-				$parameters['canCreate'] = auth()->user()->can( 'create', $model ?? new $this->modelClass() );
-			}
-		}
-
-		return $this->{$type.'Response'}( $model ?? $this->modelClass, $this->getResponseParameters( $type, $model, $parameters ) );
+		return $this->{$type.'Response'}(
+			$this->getResponseModel( $type, $model ) ?? $this->modelClass,
+			$this->getResponseParameters( $type, $model, $parameters )
+		);
 	}
 
-	protected function loadModelRelations( Model $model ): Model {
+	public function loadModelRelations( Model $model, ?string $responseType = null ): void {
 		if( count( $this->loadRelations ) ) {
-			$model->load( $this->loadRelations );
+			$model->load( $this->loadRelations[ $responseType ] ?? $this->loadRelations );
+		}
+	}
+
+	public function loadModelAppends( Model $model, ?string $responseType = null ): void {
+		if( count( $this->loadAppends ) ) {
+			$model->append( $this->loadAppends[ $responseType ] ?? $this->loadAppends );
+		}
+	}
+
+	public function getResponseModel( string $type, ?Model $model ): ?Model {
+		if( isset( $model ) ) {
+			$this->loadModelRelations( $model, $type );
+			if( $this->canLoadPolices( $model ) ) {
+				$model->appendPolicies( $this->getLoadablePolicyRelations( responseType: $type ) );
+			}
+			$this->loadModelAppends( $model, $type );
 		}
 
 		return $model;
@@ -97,8 +121,24 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 		if( in_array( $type, ['create', 'edit'] ) ) {
 			$parameters = array_merge( $parameters, $this->getCreateEditParametersWithModel( $model ) );
 		}
+		if( $type == 'index' && $this->canLoadPolices( $model ?? new $this->modelClass() ) ) {
+			$parameters['canCreate'] = auth()->user()->can( 'create', $model ?? new $this->modelClass() );
+		}
 
 		return $parameters;
+	}
+
+	public function getLoadablePolicyRelations( ?Request $request = null, ?string $responseType = null ): array {
+		return collect( $request?->relations ?? $this->loadRelations )
+			->map( function( $relation, $key ) {
+				$relation = is_string( $relation ) ? $relation : (is_string( $key ) ? $key : null);
+
+				return array_merge( [$relation], strpos( $relation, '.' ) > - 1 ? explode( '.', $relation ) : [] );
+			} )
+			->values()
+			->flatten( 1 )
+			->intersect( $this->loadablePolicyRelations[ $responseType ] ?? $this->loadablePolicyRelations )
+			->toArray();
 	}
 
 	/**
@@ -131,20 +171,21 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 
 	public function saved( Model $model ): bool|JsonResponse|Responsable|\Illuminate\Http\RedirectResponse {
 		$request = request();
-		if( !$request->header( 'X-Inertia' ) && ($request->expectsJson() || !method_exists($this->modelClass, 'show')) ) {
-			return $this->apiResponse( true, [ Str::camel(class_basename( $model )) => $model ] );
+		$responseModel = $this->getResponseModel( 'show', $model );
+		if( !$request->header( 'X-Inertia' ) && ($request->expectsJson() || !method_exists( $this->modelClass, 'show' )) ) {
+			return $this->apiResponse( true, [Str::camel( class_basename( $model ) ) => $responseModel] );
 		}
-		$routeName = $this->getRouteNameForAction( get_class($model), 'show');
-		$redirect = $this->redirectResponse( request(), $model ) ?: (
+		$routeName = $this->getRouteNameForAction( get_class( $model ), 'show' );
+		$redirect = $this->redirectResponse( request(), $responseModel ) ?: (
 			Route::has( $routeName )
-				? redirect()->route( $routeName, [Str::camel( class_basename( $model ) ) => $model] )
+				? redirect()->route( $routeName, [Str::camel( class_basename( $model ) ) => $responseModel] )
 				: false
 		);
 
 		return $redirect ?: (
 			method_exists( $this, 'show' )
 				? $this->show( $model )
-				: $this->showResponse( $model )
+				: $this->showResponse( $responseModel )
 			);
 	}
 
@@ -385,8 +426,7 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 			->take( $request['limit'] ?: 200 )
 			->values();
 		if( $records->count() && $this->canLoadPolices( $records->first() ) ) {
-			$relations = array_intersect( $request->relations ?? $this->loadRelations, $this->loadablePolicyRelations );
-			$records = $records->map->appendPolicies( $relations );
+			$records = $records->map->appendPolicies( $this->getLoadablePolicyRelations( request: $request ) );
 		}
 		$records = $records->all();
 
