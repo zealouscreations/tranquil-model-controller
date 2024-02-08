@@ -347,11 +347,12 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 		return static::apiResponse( true, [ Str::camel( Str::singular( $model->getTable() ) ) => $model->load( $request->relations ?? [] ) ] );
 	}
 
-	/**
-	 * @deprecated Use getModelRecordsQuery
-	 */
 	public function getModelQuery( Request $request ): Relation|Builder {
-		return $this->getModelRecordsQuery( $request );
+		if( isset( $this->modelQuery ) ) {
+			return $this->modelQuery;
+		}
+
+		return $this->modelClass::query();
 	}
 
 	/**
@@ -365,11 +366,8 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 	 * $request->relations -- array -- for eager loading related models
 	 */
 	public function getModelRecordsQuery( Request $request ): Relation|Builder {
-		if( isset( $this->modelQuery ) ) {
-			return $this->modelQuery;
-		}
 
-		$query = $this->modelClass::query();
+		$query = $this->getModelQuery( $request );
 
 		if( $request->select ) {
 			$query->select( $request->select );
@@ -497,17 +495,22 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 				$rawColumn = isset($filter['rawColumn']);
 				$column = $rawColumn ? DB::raw($filter['rawColumn']) : $filter['column'];
 				$relation = null;
-				$lastDotPosition = $rawColumn ? null : strrpos( $column, '.' );
-				if ( !$rawColumn && $lastDotPosition ) {
-					// One level deep relation search 'relationName.column_name'
-					$relation = substr( $column, 0, $lastDotPosition );
-					$column   = substr( $column, $lastDotPosition + 1 );
+				if( !$rawColumn ) {
+					$lastDotPosition = strrpos( $column, '.' );
+					if( $lastDotPosition ) {
+						// One level deep relation search 'relationName.column_name'
+						$relation = substr( $column, 0, $lastDotPosition );
+						$column = substr( $column, $lastDotPosition + 1 );
+					} else if( $query->getQuery()->joins ) {
+						$column = $query->getModel()->getTable().'.'.$column;
+					}
 				}
 				$operator = strtolower( $filter['operator'] ?? '' );
-				if( in_array( $operator, ['in', 'between'] ) ) {
+				$type = $filter['type'] ?? null;
+				if( in_array( $operator, ['in', 'between'] ) && !in_array( $type, ['date', 'datetime'] ) ) {
 					$searchValue = $filter['value'];
-					$where = $where.ucfirst( $operator );
-					$this->populateFilterQueryWhereClause( $query, $where, $relation, function( $query ) use ( $column, $where, $searchValue ) {
+					$this->populateFilterQueryWhereClause( $query, $where, $relation, function( $query ) use ( $column, $where, $operator, $searchValue ) {
+						$where = $where.ucfirst( $operator );
 						$query->$where( $column, $searchValue );
 					} );
 				} else {
@@ -516,7 +519,6 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 						'contains',
 						'endsWith',
 					], 'like', $filter['operator'] ) : '=';
-					$type = $filter['type'] ?? null;
 					if( !$type && !$rawColumn ) {
 						/** @var Model $model */
 						$model = (new $this->modelClass);

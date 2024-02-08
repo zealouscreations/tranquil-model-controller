@@ -497,7 +497,7 @@ class ModelControllerTest extends TestCase {
 	public function test_can_return_a_list_of_records_with_custom_model_query() {
 		/** @var TestControllerModel $model */
 		$model = TestControllerModel::where('title', 'Test5')->first();
-		$this->controller->modelQuery = $model->testControllerBelongsToModel();
+		$this->controller->modelQuery = $model->testControllerBelongsToModel()->getQuery();
 		$response = $this->controller->list(new Request());
 		$data = $response->getData();
 		$this->assertTrue($data->success);
@@ -556,6 +556,25 @@ class ModelControllerTest extends TestCase {
 		$this->assertCount(2, $data->records);
 		$titleResults = collect($data->records)->pluck('title')->toArray();
 		$this->assertContains('Test1', $titleResults);
+		$this->assertContains('Test3', $titleResults);
+	}
+
+	public function test_can_return_a_list_of_records_filtered_with_a_between_operator_search() {
+		$response = $this->controller->list(new Request([
+			'search' => [
+				[
+					'column'   => 'title',
+					'operator' => 'between',
+					'value'    => ['Test1', 'Test3'],
+				],
+			]
+		]));
+		$data = $response->getData();
+		$this->assertTrue($data->success);
+		$this->assertCount(3, $data->records);
+		$titleResults = collect($data->records)->pluck('title')->toArray();
+		$this->assertContains('Test1', $titleResults);
+		$this->assertContains('Test2', $titleResults);
 		$this->assertContains('Test3', $titleResults);
 	}
 
