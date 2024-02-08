@@ -503,10 +503,12 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 					$relation = substr( $column, 0, $lastDotPosition );
 					$column   = substr( $column, $lastDotPosition + 1 );
 				}
-				if( strtolower( $filter['operator'] ?? '' ) == 'in' ) {
+				$operator = strtolower( $filter['operator'] ?? '' );
+				if( in_array( $operator, ['in', 'between'] ) ) {
 					$searchValue = $filter['value'];
+					$where = $where.ucfirst( $operator );
 					$this->populateFilterQueryWhereClause( $query, $where, $relation, function( $query ) use ( $column, $where, $searchValue ) {
-						$query->{$where.'In'}( $column, $searchValue );
+						$query->$where( $column, $searchValue );
 					} );
 				} else {
 					$operator = isset( $filter['operator'] ) ? str_replace( [
