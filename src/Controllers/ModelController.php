@@ -524,7 +524,7 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 						$model = (new $this->modelClass);
 						$model = $relation ? $model->$relation()->getModel() : $model;
 						if( in_array( HasColumnSchema::class, class_uses_recursive( $model ) ) ) {
-							$type = $model->getColumnType( $column );
+							$type = $model->getColumnType( $relation ? $column : $filter['column'] );
 						}
 					}
 
@@ -560,7 +560,7 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 								$searchValue = DB::raw( $searchValue );
 								break;
 							default:
-								if( $operator == 'like' ) {
+								if( $operator == 'like' && !str_contains( $searchValue, '%' ) ) {
 									$searchValue =
 										(in_array( $filter['operator'], ['endsWith', 'contains', 'like'] ) ? '%' : '')
 										.$searchValue.
