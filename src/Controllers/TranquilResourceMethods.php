@@ -5,6 +5,7 @@ namespace Tranquil\Controllers;
 use Illuminate\Contracts\Support\Responsable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
@@ -13,7 +14,7 @@ trait TranquilResourceMethods {
 	/**
 	 * Display a listing of the resource.
 	 */
-	public function index( Request $request ): Responsable {
+	public function index( Request $request ): Responsable|RedirectResponse {
 		return $this->getResponse( type:'index', parameters:[
 			Str::plural( Str::camel( class_basename( $this->modelClass ) ) ) => $this->getRecords( $request )['records'],
 		] );
@@ -29,7 +30,7 @@ trait TranquilResourceMethods {
 	/**
 	 * Display the specified resource.
 	 */
-	public function show( mixed $model ): Responsable {
+	public function show( mixed $model ): Responsable|RedirectResponse {
 		return $this->getResponse( 'show', $this->loadModel( $model ) );
 	}
 
