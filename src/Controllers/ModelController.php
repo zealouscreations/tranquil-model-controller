@@ -89,15 +89,23 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 		);
 	}
 
+	public function getLoadRelations( ?string $responseType = null ): array {
+		return collect( $this->loadRelations )->hasAny( ['index', 'show', 'create', 'edit', 'list'] )
+			? $this->loadRelations[ $responseType ] ?? []
+			: $this->loadRelations;
+	}
+
 	public function loadModelRelations( Model $model, ?string $responseType = null ): void {
 		if( count( $this->loadRelations ) ) {
-			$model->load( $this->loadRelations[ $responseType ] ?? $this->loadRelations );
+			$model->load( $this->getLoadRelations( $responseType ) );
 		}
 	}
 
 	public function loadModelAppends( Model $model, ?string $responseType = null ): void {
 		if( count( $this->loadAppends ) ) {
-			$model->append( $this->loadAppends[ $responseType ] ?? $this->loadAppends );
+			$model->append( collect( $this->loadAppends )->hasAny( ['index', 'show', 'create', 'edit', 'list'] )
+				? $this->loadAppends[ $responseType ] ?? []
+				: $this->loadAppends );
 		}
 	}
 
@@ -129,7 +137,11 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 	}
 
 	public function getLoadablePolicyRelations( ?Request $request = null, ?string $responseType = null ): array {
-		return collect( $request?->relations ?? $this->loadRelations )
+		$loadablePolicyRelations = collect( $this->loadablePolicyRelations )->hasAny( ['index', 'show', 'create', 'edit', 'list'] )
+			? $this->loadablePolicyRelations[ $responseType ] ?? []
+			: $this->loadablePolicyRelations;
+
+		return collect( $request?->relations ?? $this->getLoadRelations( $responseType ) )
 			->map( function( $relation, $key ) {
 				$relation = is_string( $relation ) ? $relation : (is_string( $key ) ? $key : null);
 
@@ -137,7 +149,7 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 			} )
 			->values()
 			->flatten( 1 )
-			->intersect( $this->loadablePolicyRelations[ $responseType ] ?? $this->loadablePolicyRelations )
+			->intersect( $loadablePolicyRelations )
 			->toArray();
 	}
 
@@ -381,7 +393,7 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 		if( $request->where ) {
 			$query->where( $request->where );
 		}
-		$relations = $request->relations ?? $this->loadRelations;
+		$relations = $request->relations ?? $this->getLoadRelations( 'list' );
 		if( count( $relations ) ) {
 			$query->with( $relations );
 		}
@@ -424,7 +436,7 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 			->take( $request['limit'] ?: 200 )
 			->values();
 		if( $records->count() && $this->canLoadPolices( $records->first() ) ) {
-			$records = $records->map->appendPolicies( $this->getLoadablePolicyRelations( request: $request ) );
+			$records = $records->map->appendPolicies( $this->getLoadablePolicyRelations( $request, 'list' ) );
 		}
 		$records = $records->all();
 
