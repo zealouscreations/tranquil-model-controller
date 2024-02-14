@@ -80,6 +80,7 @@ trait HasValidation {
 				->except( ['id', 'slug', 'created_at', 'updated_at', 'deleted_at', 'created_by', 'updated_by', 'deleted_by'] )
 				->map( function( Column $schema, $column ) {
 					$required = $schema->getNotnull() ? ($schema->getDefault() === null ? 'required' : 'filled') : false;
+					$nullable = !$required ? 'nullable' : false;
 					switch( $schema->getType()->getName() ) {
 						case 'integer':
 							$rule = 'integer';
@@ -95,7 +96,7 @@ trait HasValidation {
 						default:
 							$rule = false;
 					}
-					return !$required && !$rule ? false : implode( '|', array_filter( [$required, $rule] ) );
+					return !$required && !$rule ? false : implode( '|', array_filter( [$required, $nullable, $rule] ) );
 				} )
 				->filter();
 		} );
