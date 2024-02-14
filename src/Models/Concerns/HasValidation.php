@@ -86,6 +86,7 @@ trait HasValidation {
 							break;
 						case 'float':
 						case 'double':
+						case 'decimal':
 							$rule = 'numeric';
 							break;
 						case 'boolean':
