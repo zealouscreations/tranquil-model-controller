@@ -14,7 +14,7 @@ trait TranquilResourceMethods {
 	/**
 	 * Display a listing of the resource.
 	 */
-	public function index( Request $request ): Responsable|RedirectResponse {
+	public function index( Request $request ): Responsable|RedirectResponse|JsonResponse {
 		return $this->getResponse( type:'index', parameters:[
 			Str::plural( Str::camel( class_basename( $this->modelClass ) ) ) => $this->getRecords( $request )['records'],
 		] );
@@ -23,21 +23,21 @@ trait TranquilResourceMethods {
 	/**
 	 * Show the form for creating a new resource.
 	 */
-	public function create(): Responsable {
+	public function create(): Responsable|JsonResponse {
 		return $this->getResponse( 'create' );
 	}
 
 	/**
 	 * Display the specified resource.
 	 */
-	public function show( mixed $model ): Responsable|RedirectResponse {
+	public function show( mixed $model ): Responsable|RedirectResponse|JsonResponse {
 		return $this->getResponse( 'show', $this->loadModel( $model ) );
 	}
 
 	/**
 	 * Show the form for editing the specified resource.
 	 */
-	public function edit( mixed $model ): Responsable {
+	public function edit( mixed $model ): Responsable|JsonResponse {
 		return $this->getResponse( 'edit', $this->loadModel( $model ) );
 	}
 
@@ -46,7 +46,7 @@ trait TranquilResourceMethods {
 	 *
 	 * @throws \Illuminate\Validation\ValidationException
 	 */
-	public function update( Request $request, mixed $model ): JsonResponse|bool|\Inertia\Response|\Illuminate\Http\RedirectResponse {
+	public function update( Request $request, mixed $model ): JsonResponse|bool|\Inertia\Response|RedirectResponse {
 		$model = $this->loadModel( $model );
 
 		return $this->save( $request, $model->fill( $request->all() ) );
@@ -57,7 +57,7 @@ trait TranquilResourceMethods {
 	 *
 	 * @throws \Illuminate\Validation\ValidationException
 	 */
-	public function store( Request $request ): bool|JsonResponse|\Inertia\Response|\Illuminate\Http\RedirectResponse {
+	public function store( Request $request ): bool|JsonResponse|\Inertia\Response|RedirectResponse {
 		$model = new $this->modelClass( $request->all() );
 		$this->checkModelPolicy( $model, 'create' );
 
@@ -67,7 +67,7 @@ trait TranquilResourceMethods {
 	/**
 	 * Remove the specified resource from storage.
 	 */
-	public function destroy( Request $request, mixed $model ): JsonResponse|\Inertia\Response|\Illuminate\Http\RedirectResponse {
+	public function destroy( Request $request, mixed $model ): JsonResponse|\Inertia\Response|RedirectResponse {
 		return $this->remove( $request, $this->loadModel( $model ) );
 	}
 
