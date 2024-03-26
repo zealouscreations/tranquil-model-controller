@@ -8,11 +8,17 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
 use Tranquil\Models\TranquilUser;
 
+/**
+ * Trait HasPolicy
+ *
+ * @property-read array $policy {@see self::getPolicyAttribute()}
+ * An array of what actions the authenticated user can take the Model
+ *
+ * @method self|Builder whereCan(array|string $action) - Query scope for filtering out records that the authenticated user cannot take action on
+ * @see self::scopeWhereCan()
+ */
 trait HasPolicy {
 
-	/**
-	 * policy
-	 */
 	public function getPolicyAttribute(): array {
 		$user = Auth::user() ?? new (config( 'auth.providers.users.model', TranquilUser::class ))();
 		$policyMethods = collect( get_class_methods( 'App\\Policies\\'.class_basename( get_class( $this ) ).'Policy' ) )
@@ -26,7 +32,8 @@ trait HasPolicy {
 	}
 
 	/**
-	 * appendPolicies( array $relations = [] )
+	 * This is the query scoped version of {@see HasPolicy::appendPolicies()}
+	 * @method appendPolicies( array $relations = [] )
 	 */
 	public static function scopeAppendPolicies( Builder $query, array $relations = [] ): Collection|\Illuminate\Support\Collection {
 		return $query->get()->append( 'policy' )->map( function( Model $model ) use ( $relations ) {

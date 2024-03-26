@@ -7,29 +7,30 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Schema;
 
+/**
+ * Trait HasColumns
+ *
+ * This trait is used with the {@see HasValidation} trait.
+ */
 trait HasColumnSchema {
 
+	/**
+	 * Get a collection of Doctrine\DBAL\Schema\Columns with the column names as keys
+	 *
+	 * @return Collection<Column[]>
+	 */
 	public static function getColumns(): Collection {
 		$table = (new static())->getTable();
 		return Cache::remember($table.'_columns', 180, function() use ($table) {
-			return collect(Schema::getConnection()->getDoctrineSchemaManager()->listTableColumns($table));
+			return collect(Schema::getConnection()->getDoctrineSchemaManager()->listTableColumns($table))->mapWithKeys(fn($column) => [$column->getName() => $column]);
 		});
 	}
 
-	/**
-	 * @param string $column
-	 * @return Column|null
-	 */
 	public static function getColumnSchema(string $column): ?Column {
 		return static::getColumns()->get($column);
 	}
 
-	/**
-	 * @param string $column
-	 * @return string|null
-	 */
 	public static function getColumnType(string $column): ?string {
-		$columnSchema = static::getColumnSchema($column);
-		return $columnSchema ? $columnSchema->getType()->getName() : null;
+		return  static::getColumnSchema($column)?->getType()->getName();
 	}
 }

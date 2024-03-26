@@ -29,42 +29,95 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
 
+/**
+ * Class ModelController
+ *
+ * A base controller for handling all Model resource operations
+ */
 class ModelController extends Controller implements ResourceResponsesInterface {
 
+	/**
+	 * The fully qualified class name of the Model this controller references
+	 * @default The beginning of the controller name
+	 * @example \App\Http\Controllers\UserController => \App\Models\User
+	 * @see __construct()
+	 */
 	public string $modelClass;
 
+	/**
+	 * The query builder that will be used for fetching the list of model records
+	 * @see ModelController::getModelQuery()
+	 * @see ModelController::getModelRecordsQuery()
+	 */
 	public Builder|Relation $modelQuery;
 
 	/**
 	 * An array of relations to eager load on the model
-	 * Can optionally specify relations per response type - e.g. ['index' => ['profile'], 'show' => ['profile.address']]
+	 * Can optionally specify relations per response type
+	 * @example <code>['index' => ['profile'], 'show' => ['profile.address']]</code>
+	 * @see ModelController::getLoadRelations()
 	 */
 	public array $loadRelations = [];
 
 	/**
 	 * An array of mutated attributes to append on the model
-	 * Can optionally specify relations per response type - e.g. ['index' => ['fullName'], 'show' => ['fullName', 'fullAddress']]
+	 * Can optionally specify relations per response type
+	 * @example <code>['index' => ['fullName'], 'show' => ['fullName', 'fullAddress']]</code>
+	 * @see ModelController::getLoadAppends()
 	 */
 	public array $loadAppends = [];
 
+	/**
+	 * A flag to use to bypass the loading of policies
+	 * This can also be overridden by including <code>excludePolicies</code> in the http request
+	 * @see ModelController::canLoadPolices()
+	 */
 	public bool $loadPolices = true;
 
 	/**
-	 * An array of relations that should get the policy appended to
-	 * This will only apply to relations that are eager loaded on the model
-	 * Can optionally specify relations per response type - e.g. ['index' => ['profile'], 'show' => ['profile.address']]
+	 * An array of relations that should get the policy appended to.
+	 * This will only apply to relations that are eager loaded on the model.
+	 * Can optionally specify relations per response type.
+	 * @example <code>['index' => ['profile'], 'show' => ['profile.address']]</code>
+	 * @see ModelController::getLoadablePolicyRelations()
 	 */
 	public array $loadablePolicyRelations = [];
 
+	/**
+	 * An array of the default parameters to be passed to the response for each response type.
+	 * @see ModelController::getDefaultResponseParameters()
+	 * @see ModelController::getResponseParameters()
+	 * @see ModelController::getResponseParametersForType()
+	 */
 	public array $defaultResponseParameters = [
 		'index'  => [],
 		'show'   => [],
 		'create' => [],
 		'edit'   => [],
 	];
+
+	/**
+	 * An array of the default parameters to be passed to the <pre>create</pre> and <pre>edit</pre> responses.
+	 * This would typically be the Model with all the model parameters you want to be operated on,
+	 * plus any other parameters you want to be available.
+	 * @see ModelController::getCreateEditParameters()
+	 * @see ModelController::getCreateEditParametersWithModel()
+	 */
 	public array $createEditParameters = [];
+
+	/**
+	 * The message to be flashed after a Model is created
+	 */
 	public string $createdFlashMessage = 'Created';
+
+	/**
+	 * The message to be flashed after a Model is saved
+	 */
 	public string $savedFlashMessage = 'Saved';
+
+	/**
+	 * The message to be flashed after a Model is deleted
+	 */
 	public string $deletedFlashMessage = 'Deleted';
 
 	public function __construct() {
@@ -101,11 +154,15 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 		}
 	}
 
+	public function getLoadAppends( ?string $responseType = null ): array {
+		return collect( $this->loadAppends )->hasAny( ['index', 'show', 'create', 'edit', 'list'] )
+			? $this->loadAppends[ $responseType ] ?? []
+			: $this->loadAppends;
+	}
+
 	public function loadModelAppends( Model $model, ?string $responseType = null ): void {
 		if( count( $this->loadAppends ) ) {
-			$model->append( collect( $this->loadAppends )->hasAny( ['index', 'show', 'create', 'edit', 'list'] )
-				? $this->loadAppends[ $responseType ] ?? []
-				: $this->loadAppends );
+			$model->append( $this->getLoadAppends( $responseType ) );
 		}
 	}
 
@@ -177,6 +234,9 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 			: $this->saved( $model->fresh() );
 	}
 
+	/**
+	 * Method for hooking into after a model has been stored and before it returns a response from the saved method
+	 */
 	public function stored( Model $model ): bool|JsonResponse|Responsable|\Illuminate\Http\RedirectResponse {
 		return $this->saved( $model );
 	}
@@ -189,16 +249,16 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 		}
 		$routeName = $this->getRouteNameForAction( get_class( $model ), 'show' );
 		$redirect = $this->redirectResponse( request(), $responseModel ) ?: (
-			Route::has( $routeName )
-				? redirect()->route( $routeName, [Str::camel( class_basename( $model ) ) => $responseModel] )
-				: false
+		Route::has( $routeName )
+			? redirect()->route( $routeName, [Str::camel( class_basename( $model ) ) => $responseModel] )
+			: false
 		);
 
 		return $redirect ?: (
-			method_exists( $this, 'show' )
-				? $this->show( $model )
-				: $this->showResponse( $responseModel )
-			);
+		method_exists( $this, 'show' )
+			? $this->show( $model )
+			: $this->showResponse( $responseModel )
+		);
 	}
 
 	/**
@@ -211,6 +271,7 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 		$createdAssociatedRelation = false;
 		foreach( $inputs as $relatedColumn => $input ) {
 			if( is_array( $input ) && method_exists( $model, $relatedColumn ) && is_a( $model->$relatedColumn(), Relation::class ) ) {
+				$relatedPrimaryKey = $model->$relatedColumn()->getModel()->getKeyName();
 				$hasOne = is_a( $model->$relatedColumn(), HasOne::class ) || is_a( $model->$relatedColumn(), MorphTo::class ) || is_a( $model->$relatedColumn(), MorphOne::class );
 				$belongsTo = is_a( $model->$relatedColumn(), BelongsTo::class );
 				$belongsToMany = is_a( $model->$relatedColumn(), BelongsToMany::class ) || is_a( $model->$relatedColumn(), MorphToMany::class );
@@ -224,8 +285,8 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 						if( $hasOne ) {
 							$relationsToCreate[] = compact('relatedColumn', 'input');
 						} else {
-							if( isset( $input['id'] ) ) {
-								$relatedModel = $model->$relatedColumn()->getModel()->where( 'id', $input['id'] )->first();
+							if( isset( $input[$relatedPrimaryKey] ) ) {
+								$relatedModel = $model->$relatedColumn()->getModel()->where( $relatedPrimaryKey, $input[$relatedPrimaryKey] )->first();
 								$relatedModel->fill( $input );
 								$relatedModel->save();
 							} else {
@@ -244,11 +305,11 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 							$relationsToSync[] = compact( 'relatedColumn', 'input' );
 						} else {
 							$inputCollection = collect( $input );
-							if( $inputCollection->pluck( 'id' )->filter()->count() ) {
+							if( $inputCollection->pluck( $relatedPrimaryKey )->filter()->count() ) {
 								$pivotField = $model->$relatedColumn()->getPivotAccessor();
-								$input = $inputCollection->mapWithKeys( function( $item, $key ) use ( $pivotField ) {
+								$input = $inputCollection->mapWithKeys( function( $item, $key ) use ( $pivotField, $relatedPrimaryKey ) {
 									$itemArray = (array) $item;
-									$id = $itemArray['id'] ?? (is_numeric( $item ) ? $item : $key);
+									$id = $itemArray[$relatedPrimaryKey] ?? (is_numeric( $item ) ? $item : $key);
 									$pivotAttributes = isset($itemArray[ $pivotField ]) ? Arr::except($itemArray[ $pivotField ], ['errors']) : null;
 									return [$id => $pivotAttributes ?? $id];
 								} )->toArray();
@@ -281,7 +342,8 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 			if( isset( $relation['foreignKey'] ) ) {
 				$input[ $relation['foreignKey'] ] = $model->getKey();
 			}
-			$relatedModel = $model->$relatedColumn()->updateOrCreate( ['id' => $input['id'] ?? null], $input );
+			$relatedPrimaryKey = $model->$relatedColumn()->getModel()->getKeyName();
+			$relatedModel = $model->$relatedColumn()->updateOrCreate( [$relatedPrimaryKey => $input[$relatedPrimaryKey] ?? null], $input );
 			$this->saveRelations( $input, $relatedModel );
 		}
 		foreach($relationsToSync as $relation) {
@@ -353,12 +415,16 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 	 * Retrieve data for a single model
 	 *
 	 * Optional request parameter:
-	 * $request->relations -- array -- for eager loading related models
+	 * <code>$request->relations</code> -- array -- for eager loading related models
 	 */
 	public static function getModel( Request $request, Model $model ): JsonResponse {
 		return static::apiResponse( true, [ Str::camel( Str::singular( $model->getTable() ) ) => $model->load( $request->relations ?? [] ) ] );
 	}
 
+	/**
+	 * Get the query builder that will be used for fetching the list of model records
+	 * @see ModelController::getModelRecordsQuery()
+	 */
 	public function getModelQuery( Request $request ): Relation|Builder {
 		if( isset( $this->modelQuery ) ) {
 			return $this->modelQuery;
@@ -371,11 +437,13 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 	 * Retrieve the Model query Builder for fetching the model records
 	 *
 	 * Optional request parameters:
-	 * $request->select -- string|array -- for selecting specific columns
-	 * $request->search -- array -- see notes on the addQueryFilters method
-	 * $request->orderBy -- string -- for ordering records by column(s)
-	 * $request->where -- array -- a single where clause to add to the query Builder
-	 * $request->relations -- array -- for eager loading related models
+	 * <code>$request->select</code> -- string|array -- for selecting specific columns<br>
+	 * <code>$request->orderBy</code> -- string -- for ordering records by column(s)<br>
+	 * <code>$request->where</code> -- array -- a single where clause to add to the query Builder<br>
+	 * <code>$request->relations</code> -- array -- for eager loading related models<br>
+	 * <code>$request->scopes</code> -- array -- for using model query scopes
+	 * <code>$request->search</code> -- array -- see notes on the addQueryFilters method<br>
+	 * @see ModelController::addQueryFilters()
 	 */
 	public function getModelRecordsQuery( Request $request ): Relation|Builder {
 
@@ -397,14 +465,32 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 		if( count( $relations ) ) {
 			$query->with( $relations );
 		}
+		foreach( $request->scopes ?? [] as $index => $value ) {
+			$scope = is_string( $index ) ? $index : $value;
+			$parameters = is_string( $index ) ? $value : [];
+			$query->{$scope}( ...(is_array( $parameters ) ? $parameters : [$parameters]) );
+		}
 
 		return $query;
 	}
+
+	public function getQueryLimitOffset( Request $request, Builder $query ): Builder {
+		if( $request->has('limit') ) {
+			$query->limit( $request->limit );
+			if( $request->has('offset') ) {
+				$query->offset( $request->offset );
+			}
+		}
+
+		return $query;
+	}
+
 
 	/**
 	 * Return and api response with a list of records for the model and the total count
 	 *
 	 * See notes on the getRecords method for optional request parameters
+	 * @see ModelController::getRecords()
 	 */
 	public function list( Request $request ): JsonResponse {
 		return $this->apiResponse( true, $this->getRecords( $request ) );
@@ -413,34 +499,42 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 	/**
 	 * Retrieve a list of records for the model and the total count
 	 *
-	 * Optional request parameters for the query Builder (see getModelRecordsQuery method):
-	 * $request->select -- string|array -- for selecting specific columns
-	 * $request->search -- array -- see notes on the addQueryFilters method
-	 * $request->orderBy -- string -- for ordering records by column(s)
-	 * $request->where -- array -- a single where clause to add to the query Builder
-	 * $request->relations -- array -- for eager loading related models
-	 *
-	 * Optional request parameters for the Collection returned from the query Builder:
-	 * $request->sortBy -- string -- for ordering list by column(s) via the returned Collection from the query Builder
-	 * $request->descending -- bool -- (default=false) used with $request->sortBy to set the sort direction
-	 * $request->offset -- int -- the index at which to start the list from
-	 * $request->limit -- int -- the maximum number of records to return
+	 * Optional request parameters for the query Builder:
+	 * @see ModelController::getModelRecordsQuery() <br>
+	 * <code>$request->select</code> -- string|array -- for selecting specific columns<br>
+	 * <code>$request->search</code> -- array -- see notes on the addQueryFilters method
+	 * @see ModelController::addQueryFilters() <br>
+	 * <code>$request->offset</code> -- int -- the index at which to start the query from<br>
+	 * <code>$request->limit</code> -- int -- the maximum number of records to return from the query<br>
+	 * <code>$request->orderBy</code> -- string -- for ordering records by column(s)<br>
+	 * <code>$request->where</code> -- array -- a single where clause to add to the query Builder<br>
+	 * <code>$request->relations</code> -- array -- for eager loading related models<br>
+	 * <code>$request->scopes</code> -- array -- for using model query scopes<br><br>
+	 * <hr>
+	 * Optional request parameters for the Collection returned from the query Builder:<br>
+	 * <code>$request->sortBy</code> -- string -- for ordering list by column(s) via the returned Collection from the query Builder<br>
+	 * <code>$request->descending</code> -- bool -- (default=false) used with $request->sortBy to set the sort direction<br>
+	 * <code>$request->slice</code> -- int -- the index at which to start the list from the records collection<br>
+	 * <code>$request->take</code> -- int -- the maximum number of records to return from the collection<br>
 	 */
 	public function getRecords( Request $request ): array {
 		$query = $this->getModelRecordsQuery( $request );
+		$total = $query->count();
+		$query = $this->getQueryLimitOffset( $request, $query );
 		$records = $this->getRecordsFromQuery( $query );
-		$total = $records->count();
+		$appends = $request->appends ?? $this->getLoadAppends( 'list' );
+		if( count( $appends ) ) {
+			$records->append( $appends );
+		}
 		$records = $this->sortRecords( $records, $request );
-		$records = $records
-			->slice( $request['offset'] ?: 0 )
-			->take( $request['limit'] ?: 200 )
-			->values();
+		$records = $this->sliceTakeRecords( $records, $request );
 		if( $records->count() && $this->canLoadPolices( $records->first() ) ) {
 			$records = $records->map->appendPolicies( $this->getLoadablePolicyRelations( $request, 'list' ) );
 		}
+		$nextOffset = $request->limit ? $request->offset + $records->count() : 0;
 		$records = $records->all();
 
-		return compact( 'total', 'records' );
+		return compact( 'total', 'records', 'nextOffset' );
 	}
 
 	public function getRecordsFromQuery( Builder $query ): Collection {
@@ -453,9 +547,20 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 		return $request->sortBy ? $records->sortBy( $request->sortBy, SORT_REGULAR, $request->descending ) : $records;
 	}
 
+	public function sliceTakeRecords( Collection $records, Request $request ): Collection {
+		if( $request->has('slice') ) {
+			$records->slice( $request->slice );
+		}
+		if( $request->has('take') ) {
+			$records->take( $request->take );
+		}
+
+		return $records->values();
+	}
+
 	/**
-	 * $filters examples:
-	 * [
+	 * Apply filters to the query builder.
+	 * <code>$filters[
 	 *     [
 	 *         'logic'         => 'and',        // optional - 'and', 'or' - default is 'and'
 	 *         'column'        => 'first_name', // required
@@ -493,7 +598,7 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 	 *             ],
 	 *         ],
 	 *     ],
-	 * ]
+	 * ]</code>
 	 */
 	public function addQueryFilters( Builder &$query, array $filters ) {
 		foreach ( $filters as $filter ) {
@@ -627,7 +732,7 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 	}
 
 	public function canLoadPolices( Model $model ): bool {
-		return $this->loadPolices && $this->modelUsesPolicy( $model );
+		return !request()->excludePolicies && $this->loadPolices && $this->modelUsesPolicy( $model );
 	}
 
 	public function getDefaultResponseParameters(): array {
@@ -645,14 +750,14 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 
 	public function getCreateEditParametersWithModel( $model = null ): array {
 		$parameters = $this->getCreateEditParameters();
-		if( !count( $parameters ) ) {
+		if( !count( $parameters ) && in_array( HasColumnSchema::class, class_uses_recursive( $this->modelClass ) ) ) {
 			$columns = $model
 				? $model->makeHidden( ['created_at', 'updated_at', 'deleted_at', 'created_by', 'updated_by', 'deleted_by'] )
 						->toArray()
 				: $this->modelClass::getColumns()
-					->except( ['id', 'slug', 'created_at', 'updated_at', 'deleted_at', 'created_by', 'updated_by', 'deleted_by', 'remember_token', 'email_verified_at'] )
-					->mapWithKeys( fn( $item, $key ) => [$key => null] )
-					->toArray();
+								   ->except( [(new $this->modelClass())->getKeyName(), 'id', 'slug', 'created_at', 'updated_at', 'deleted_at', 'created_by', 'updated_by', 'deleted_by', 'remember_token', 'email_verified_at'] )
+								   ->mapWithKeys( fn( $item, $key ) => [$key => null] )
+								   ->toArray();
 			$parameters = [Str::camel( class_basename( $this->modelClass ) ) => $columns];
 		}
 

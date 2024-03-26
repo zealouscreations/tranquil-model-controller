@@ -9,6 +9,12 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
+/**
+ * Trait TranquilResourceMethods
+ *
+ * This provides all the methods for a Model controller
+ * <pre>index, show, create, store, edit, update, destroy</pre>
+ */
 trait TranquilResourceMethods {
 
 	/**
@@ -71,7 +77,43 @@ trait TranquilResourceMethods {
 		return $this->remove( $request, $this->loadModel( $model ) );
 	}
 
+	/**
+	 * Retrieve the Model if it hasn't already been retrieved from the route binding
+	 */
 	protected function loadModel( $model ): Model {
 		return is_a( $model, Model::class ) ? $model : $this->modelClass::findOrFail( $model );
 	}
+
+	/**
+	 * Implement this abstract method for returning a response for each response types:
+	 * <pre>index, show, create, edit</pre>
+	 * @see ModelController::getResponse()
+	 */
+	public abstract function getResponse( string $type, $model = null, $parameters = [] );
+
+	/**
+	 * Implement this abstract method for returning a list of records of the Model
+	 * @see ModelController::getRecords()
+	 */
+	public abstract function getRecords( Request $request ): array;
+
+	/**
+	 * Implement this abstract method for persisting the Model to the database
+	 * @see ModelController::save()
+	 */
+	public abstract function save( Request $request, mixed $model ): bool|JsonResponse|Responsable|\Illuminate\Http\RedirectResponse;
+
+	/**
+	 * Implement this abstract method for deleting the Model to the database
+	 * @see ModelController::remove()
+	 */
+	public abstract function remove( Request $request, mixed $model ): JsonResponse|Responsable|\Illuminate\Http\RedirectResponse;
+
+	/**
+	 * Implement this abstract method for determining if the logged-in user can perform a specific action on a Model
+	 * @example
+	 * <pre>if( !auth()->user()->can( $action, $model ) ) { abort( 403 ); }</pre>
+	 * @see ModelController::checkModelPolicy()
+	 */
+	public abstract function checkModelPolicy( Model $model, $action );
 }

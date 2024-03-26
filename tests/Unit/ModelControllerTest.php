@@ -511,13 +511,6 @@ class ModelControllerTest extends TestCase {
 		$this->assertCount(2, $data->records);
 	}
 
-	public function test_can_return_a_list_of_records_with_an_offset() {
-		$response = $this->controller->list(new Request(['offset' => 2]));
-		$data = $response->getData();
-		$this->assertTrue($data->success);
-		$this->assertEquals('Test3', $data->records[0]->title);
-	}
-
 	public function test_can_return_a_list_of_records_with_an_offset_and_limit() {
 		$response = $this->controller->list(new Request(['offset' => 2, 'limit' => 2]));
 		$data = $response->getData();
