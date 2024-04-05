@@ -120,9 +120,13 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 	 */
 	public string $deletedFlashMessage = 'Deleted';
 
+	public string $controllerNamespace = 'App\Http\Controllers';
+
+	public string $modelNamespace = 'App\Models';
+
 	public function __construct() {
 		if( !isset( $this->modelClass ) ) {
-			$this->modelClass = str_replace( ['App\Http\Controllers', 'Controller'], ['App\Models', ''], get_class( $this ) );
+			$this->modelClass = str_replace( [$this->controllerNamespace, 'Controller'], [$this->modelNamespace, ''], get_class( $this ) );
 		}
 	}
 
@@ -149,8 +153,9 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 	}
 
 	public function loadModelRelations( Model $model, ?string $responseType = null ): void {
-		if( count( $this->loadRelations ) ) {
-			$model->load( $this->getLoadRelations( $responseType ) );
+		$relations = $this->getLoadRelations( $responseType );
+		if( count( $relations ) ) {
+			$model->load( $relations );
 		}
 	}
 
@@ -161,8 +166,9 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 	}
 
 	public function loadModelAppends( Model $model, ?string $responseType = null ): void {
-		if( count( $this->loadAppends ) ) {
-			$model->append( $this->getLoadAppends( $responseType ) );
+		$appends = $this->getLoadAppends( $responseType );
+		if( count( $appends ) ) {
+			$model->append( $appends );
 		}
 	}
 
@@ -750,18 +756,45 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 
 	public function getCreateEditParametersWithModel( $model = null ): array {
 		$parameters = $this->getCreateEditParameters();
-		if( !count( $parameters ) && in_array( HasColumnSchema::class, class_uses_recursive( $this->modelClass ) ) ) {
+		if( !count( $parameters ) && in_array( HasColumnSchema::class, class_uses_recursive( $model ?? $this->modelClass ) ) ) {
 			$columns = $model
-				? $model->makeHidden( ['created_at', 'updated_at', 'deleted_at', 'created_by', 'updated_by', 'deleted_by'] )
-						->toArray()
-				: $this->modelClass::getColumns()
-								   ->except( [(new $this->modelClass())->getKeyName(), 'id', 'slug', 'created_at', 'updated_at', 'deleted_at', 'created_by', 'updated_by', 'deleted_by', 'remember_token', 'email_verified_at'] )
-								   ->mapWithKeys( fn( $item, $key ) => [$key => null] )
-								   ->toArray();
+				? $this->getFilledModelArray( $model )
+				: $this->getEmptyModelArray( $this->modelClass );
 			$parameters = [Str::camel( class_basename( $this->modelClass ) ) => $columns];
 		}
 
 		return $parameters;
+	}
+
+	public function getFilledModelArray( $model ): array {
+		return $model->makeHidden( [
+			'pivot',
+			'created_at',
+			'updated_at',
+			'deleted_at',
+			'created_by',
+			'updated_by',
+			'deleted_by',
+		] )->toArray();
+	}
+
+	public function getEmptyModelArray( string $modelClass ): array {
+		return $modelClass::getColumns()
+						  ->except( [
+							  (new $modelClass())->getKeyName(),
+							  'id',
+							  'slug',
+							  'created_at',
+							  'updated_at',
+							  'deleted_at',
+							  'created_by',
+							  'updated_by',
+							  'deleted_by',
+							  'remember_token',
+							  'email_verified_at',
+						  ] )
+						  ->mapWithKeys( fn( $item, $key ) => [$key => null] )
+						  ->toArray();
 	}
 
 	public function getRouteNameForAction( $modelClass, $action ): string {

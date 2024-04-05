@@ -39,10 +39,10 @@ class Controller extends BaseController implements ResourceResponsesInterface {
 	}
 
 	public function showResponse( mixed $model, array $parameters = [] ): Responsable|JsonResponse {
-		return self::apiResponse( true, array_merge( $parameters, [Str::camel( class_basename( $model ) ) => $model] ) );
+		return self::apiResponse( true, array_merge( [Str::camel( class_basename( $model ) ) => $model], $parameters ) );
 	}
 
 	public function editResponse( mixed $model, $parameters = [] ): Responsable|JsonResponse {
-		return self::apiResponse( true, array_merge( $parameters, [Str::camel( class_basename( $model ) ) => $model] ) );
+		return self::apiResponse( true, array_merge( [Str::camel( class_basename( $model ) ) => $model], $parameters ) );
 	}
 }

@@ -109,7 +109,7 @@ trait HasValidation {
 		return static::getSchemaColumnRules()->merge($defaultRules)
 					 ->filter( function( $rules ) {
 						 if(is_string($rules)) {
-							 return Str::contains($rules, 'required') && !Str::contains($rules, 'sometimes');
+							 return Str::contains($rules, 'required');
 						 }
 						 if(is_array($rules)) {
 							 return collect($rules)->contains('required');
@@ -154,13 +154,12 @@ trait HasValidation {
 	}
 
 	public function getDefaultValidationAttributes(): array {
-		$modifiedAttributes = $this->getDirty();
-		return $this->exists ? $modifiedAttributes : array_merge(
+		return array_merge(
 			$this->getRequiredColumns()
 				 ->mapWithKeys( function( $column ) {
-					 return [$column => null];
+					 return [$column => $this->exists ? $this->$column : null];
 				 } )
 				 ->toArray(),
-			$modifiedAttributes );
+			$this->getDirty() );
 	}
 }
