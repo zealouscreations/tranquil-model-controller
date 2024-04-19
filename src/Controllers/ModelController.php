@@ -250,7 +250,7 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 	public function saved( Model $model ): bool|JsonResponse|Responsable|\Illuminate\Http\RedirectResponse {
 		$request = request();
 		$responseModel = $this->getResponseModel( 'show', $model );
-		if( !$request->header( 'X-Inertia' ) && ($request->expectsJson() || !method_exists( $this->modelClass, 'show' )) ) {
+		if( !$request->header( 'X-Inertia' ) && ($request->expectsJson() || !method_exists( $this, 'show' )) ) {
 			return $this->apiResponse( true, [Str::camel( class_basename( $model ) ) => $responseModel] );
 		}
 		$routeName = $this->getRouteNameForAction( get_class( $model ), 'show' );
@@ -382,9 +382,9 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 	}
 
 	/**
-	 * Use $request->permanent = true to permanently remove from the database
-	 * Use $request->redirectRoute to redirect to a different route - defaults to model's index
-	 * Use $request->redirectParameters to add parameters to the redirect route - e.g. ['model' => 1]
+	 * Use <code>$request->permanent = true</code> to permanently remove from the database<br>
+	 * Use <code>$request->redirectRoute</code> to redirect to a different route - defaults to model's index<br>
+	 * Use <code>$request->redirectParameters</code> to add parameters to the redirect route - e.g. <code>['model' => 1]</code>
 	 */
 	public function remove( Request $request, mixed $model ): JsonResponse|Responsable|\Illuminate\Http\RedirectResponse {
 		/** @var $model Model */
@@ -472,9 +472,18 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 			$query->with( $relations );
 		}
 		foreach( $request->scopes ?? [] as $index => $value ) {
-			$scope = is_string( $index ) ? $index : $value;
-			$parameters = is_string( $index ) ? $value : [];
+			if( !is_string( $index ) && is_array( $value ) ) {
+				$scope = array_key_first( $value );
+				$parameters = $value[ $scope ];
+			} else {
+				$scope = is_string( $index ) ? $index : $value;
+				$parameters = is_string( $index ) ? $value : [];
+			}
 			$query->{$scope}( ...(is_array( $parameters ) ? $parameters : [$parameters]) );
+		}
+
+		if( $this->modelUsesPolicy( new $this->modelClass() ) ) {
+			$query->whereCan( 'view' );
 		}
 
 		return $query;
@@ -483,9 +492,9 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 	public function getQueryLimitOffset( Request $request, Builder $query ): Builder {
 		if( $request->has('limit') ) {
 			$query->limit( $request->limit );
-			if( $request->has('offset') ) {
-				$query->offset( $request->offset );
-			}
+		}
+		if( $request->has('offset') ) {
+			$query->offset( $request->offset );
 		}
 
 		return $query;
@@ -544,9 +553,7 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 	}
 
 	public function getRecordsFromQuery( Builder $query ): Collection {
-		return $this->modelUsesPolicy( new $this->modelClass() )
-			? $query->whereCan( 'view' )
-			: $query->get();
+		return $query->get();
 	}
 
 	public function sortRecords( Collection $records, Request $request ): Collection {
@@ -723,7 +730,7 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 	}
 
 	public function modelHasPolicy( Model $model ): bool {
-		return class_exists( 'App\\Policies\\' . class_basename( get_class( $model ) ) . 'Policy' );
+		return class_exists( str_replace('Models', 'Policies', get_class( $model )) . 'Policy' );
 	}
 
 	public function checkModelPolicy( Model $model, $action ) {
@@ -756,11 +763,11 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 
 	public function getCreateEditParametersWithModel( $model = null ): array {
 		$parameters = $this->getCreateEditParameters();
-		if( !count( $parameters ) && in_array( HasColumnSchema::class, class_uses_recursive( $model ?? $this->modelClass ) ) ) {
+		if( in_array( HasColumnSchema::class, class_uses_recursive( $model ?? $this->modelClass ) ) ) {
 			$columns = $model
 				? $this->getFilledModelArray( $model )
 				: $this->getEmptyModelArray( $this->modelClass );
-			$parameters = [Str::camel( class_basename( $this->modelClass ) ) => $columns];
+			$parameters = array_merge($parameters, [Str::camel( class_basename( $this->modelClass ) ) => $columns]);
 		}
 
 		return $parameters;
@@ -778,27 +785,71 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 		] )->toArray();
 	}
 
-	public function getEmptyModelArray( string $modelClass ): array {
-		return $modelClass::getColumns()
-						  ->except( [
-							  (new $modelClass())->getKeyName(),
-							  'id',
-							  'slug',
-							  'created_at',
-							  'updated_at',
-							  'deleted_at',
-							  'created_by',
-							  'updated_by',
-							  'deleted_by',
-							  'remember_token',
-							  'email_verified_at',
-						  ] )
-						  ->mapWithKeys( fn( $item, $key ) => [$key => null] )
-						  ->toArray();
+	public function getEmptyModelArray( string $modelClass, array $withRelations = [] ): array {
+		$model = new $modelClass();
+		$emptyModel = $model::getColumns()
+							->except( [
+								(new $modelClass())->getKeyName(),
+								'id',
+								'slug',
+								'created_at',
+								'updated_at',
+								'deleted_at',
+								'created_by',
+								'updated_by',
+								'deleted_by',
+								'remember_token',
+								'email_verified_at',
+							] )
+							->mapWithKeys( fn( $item, $key ) => [$key => null] )
+							->toArray();
+		foreach( $withRelations as $relation ) {
+			if( method_exists( $model, $relation ) && is_a( $model->$relation(), Relation::class ) ) {
+				$emptyModel[ $relation ] = $this->getEmptyModelArray( get_class( $model->$relation()->getModel() ) );
+			}
+		}
+
+		return $emptyModel;
 	}
 
 	public function getRouteNameForAction( $modelClass, $action ): string {
 		return Str::kebab( Str::plural( class_basename( $modelClass ) ) ).'.'.$action;
 	}
 
+	/**
+	 * Retrieve the Model if it hasn't already been retrieved from the route binding
+	 */
+	protected function retrieveModel( $model ): Model {
+		return is_a( $model, Model::class ) ? $model : $this->modelClass::findOrFail( $model );
+	}
+
+	public function redirectResponse( Request $request, Model $model = null ): bool|\Illuminate\Http\RedirectResponse {
+		if( !$request->redirectRoute && !$request->redirectUrl ) {
+			return false;
+		}
+
+		return $request->redirectUrl
+			? redirect( $request->redirectUrl )
+			: redirect()->route( $request->redirectRoute, $request->redirectParameters ?? ( $model ? [Str::camel( class_basename( $model ) ) => $model] : [] ) );
+	}
+
+	public static function apiResponse(bool $success, $data = [], $message = ''): JsonResponse {
+		return response()->json(array_merge(compact('success', 'message'), $data));
+	}
+
+	public function indexResponse( string $modelClass, $parameters = [] ): Responsable|JsonResponse {
+		return self::apiResponse( true, $parameters );
+	}
+
+	public function createResponse( string $modelClass, $parameters = [] ): Responsable|JsonResponse {
+		return self::apiResponse( true, $parameters );
+	}
+
+	public function showResponse( mixed $model, array $parameters = [] ): Responsable|JsonResponse {
+		return self::apiResponse( true, array_merge( [Str::camel( class_basename( $model ) ) => $model], $parameters ) );
+	}
+
+	public function editResponse( mixed $model, $parameters = [] ): Responsable|JsonResponse {
+		return self::apiResponse( true, array_merge( [Str::camel( class_basename( $model ) ) => $model], $parameters ) );
+	}
 }

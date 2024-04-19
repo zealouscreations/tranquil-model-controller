@@ -154,12 +154,13 @@ trait HasValidation {
 	}
 
 	public function getDefaultValidationAttributes(): array {
-		return array_merge(
-			$this->getRequiredColumns()
-				 ->mapWithKeys( function( $column ) {
-					 return [$column => $this->exists ? $this->$column : null];
-				 } )
-				 ->toArray(),
-			$this->getDirty() );
+		$modifiedAttributes = $this->getDirty();
+		return $this->exists
+			? $modifiedAttributes
+			: $this->getRequiredColumns()
+				   ->mapWithKeys( function( $column ) use( $modifiedAttributes )  {
+					   return [$column => $modifiedAttributes[$column] ?? null];
+				   } )
+				   ->toArray();
 	}
 }

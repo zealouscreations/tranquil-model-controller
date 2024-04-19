@@ -16,6 +16,13 @@ use Inertia\Inertia;
 trait InertiaResponses {
 
 	/**
+	 * Set this to override the path prefix to the front-end components for all response types
+	 * @default '{plural of $modelClass}'
+	 * @see getComponentPathPrefix()
+	 */
+	public string $componentPathPrefix;
+
+	/**
 	 * Set this to override the path to the front-end index component
 	 * @default '{plural of $modelClass}/Index'
 	 * @see getComponentPath()
@@ -68,6 +75,10 @@ trait InertiaResponses {
 	}
 
 	public function getComponentPath( string $modelClass, string $responseType ): string {
-		return $this->{$responseType.'Path'} ?? ucfirst( Str::plural( Str::camel( class_basename( $modelClass ) ) ) ).'/'.ucfirst( $responseType );
+		return $this->{$responseType.'Path'} ?? $this->getComponentPathPrefix( $modelClass ).'/'.ucfirst( $responseType );
+	}
+
+	public function getComponentPathPrefix( string $modelClass ): string {
+		return $this->componentPathPrefix ?? ucfirst( Str::plural( Str::camel( class_basename( $modelClass ) ) ) );
 	}
 }
