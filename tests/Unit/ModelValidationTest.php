@@ -44,9 +44,83 @@ class ModelValidationTest extends TestCase {
 		$validator = $model->getValidator();
 		$this->assertTrue($validator->passes());
 	}
+
+	public function test_will_pass_validation_when_a_parameter_has_not_been_supplied_on_a_required_with_rule() {
+		$model = new TestRequiredWithValidationModel(['required_column' => 'test']);
+		$this->assertTrue($model->getValidator()->passes());
+		$model = new TestRequiredWithValidationModel(['required_column' => 'test', 'nullable_column' => null]);
+		$this->assertTrue($model->getValidator()->passes());
+		$model = TestRequiredWithValidationModel::create(['required_column' => 'test']);
+		$model->nullable_column = null;
+		$this->assertTrue($model->getValidator()->passes());
+	}
+
+	public function test_will_fail_validation_when_a_parameter_has_been_supplied_on_a_required_with_rule() {
+		$model = new TestRequiredWithValidationModel(['required_column' => 'test', 'another_nullable_column' => TestEnum::A]);
+		$this->assertTrue($model->getValidator()->fails());
+		$model = new TestRequiredWithValidationModel(['required_column' => 'test', 'nullable_column' => null, 'another_nullable_column' => TestEnum::A]);
+		$this->assertTrue($model->getValidator()->fails());
+		$model = TestRequiredWithValidationModel::create(['required_column' => 'test']);
+		$model->another_nullable_column = TestEnum::A;
+		$this->assertTrue($model->getValidator()->fails());
+	}
+
+	public function test_will_pass_validation_when_a_parameter_has_not_been_supplied_on_a_sometimes_required_rule() {
+		$model = new TestSometimesValidationModel(['required_column' => 'test']);
+		$this->assertTrue($model->getValidator()->passes());
+		$model = TestSometimesValidationModel::create(['required_column' => 'test']);
+		$model->nullable_column = null;
+		$this->assertTrue($model->getValidator()->passes());
+	}
+
+	public function test_will_pass_validation_when_a_parameter_has_not_been_supplied_on_a_sometimes_required_with_rule() {
+		$model = new TestSometimesValidationModel(['required_column' => 'test', 'another_nullable_column' => 'test']);
+		$this->assertTrue($model->getValidator()->passes());
+		$model = TestSometimesValidationModel::create(['required_column' => 'test', 'another_nullable_column' => 'test']);
+		$model->nullable_column = null;
+		$this->assertTrue($model->getValidator()->passes());
+	}
+
+	public function test_will_fail_validation_when_a_null_parameter_is_supplied_to_a_sometimes_required_rule() {
+		$model = new TestSometimesValidationModel(['required_column' => 'test', 'another_nullable_column' => null]);
+		$this->assertTrue($model->getValidator()->fails());
+		$model = TestSometimesValidationModel::create(['required_column' => 'test']);
+		$model->another_nullable_column = null;
+		$this->assertTrue($model->getValidator()->fails());
+	}
+
+	public function test_will_fail_validation_when_a_null_parameter_is_supplied_to_a_sometimes_required_with_rule() {
+		$model = new TestSometimesValidationModel(['required_column' => 'test', 'nullable_column' => null, 'another_nullable_column' => 'test']);
+		$this->assertTrue($model->getValidator()->fails());
+		$model = TestSometimesValidationModel::create(['required_column' => 'test']);
+		$model->nullable_column = null;
+		$model->another_nullable_column = 'test';
+		$this->assertTrue($model->getValidator()->fails());
+	}
+}
+
+enum TestEnum {
+	case A;
+	case B;
 }
 
 class TestValidationModel extends TranquilModel {
 	public $timestamps = false;
-	protected $fillable = ['required_column', 'nullable_column'];
+	protected $fillable = ['required_column', 'nullable_column', 'another_nullable_column'];
+}
+
+class TestSometimesValidationModel extends TestValidationModel {
+	protected $table = 'test_validation_models';
+	public array $validationRules = [
+		'nullable_column' => ['sometimes', 'required_with:another_nullable_column'],
+		'another_nullable_column' => 'sometimes|required',
+	];
+}
+
+class TestRequiredWithValidationModel extends TestValidationModel {
+	protected $table = 'test_validation_models';
+	protected $casts = ['another_nullable_column' => TestEnum::class];
+	public array $validationRules = [
+		'nullable_column' => 'required_with:another_nullable_column',
+	];
 }

@@ -65,7 +65,7 @@ trait HasValidation {
 	 * @throws \Illuminate\Validation\ValidationException
 	 */
 	public function validate( array $attributes = [] ) {
-		$this->getValidator( $attributes ?? $this->getDefaultValidationAttributes() )->validate();
+		$this->getValidator( $attributes )->validate();
 	}
 
 	public static function getAllValidationRules(): array {
@@ -102,17 +102,18 @@ trait HasValidation {
 	}
 
 	public static function getRequiredColumns(): Collection {
-		$defaultRules = collect((new static())->getValidationRules() ?? [])->mapWithKeys(function($rule, $column) {
-			return [$column => is_array($rule) && collect($rule)->every(fn($item) => is_string($item)) ? implode('|', $rule) : $rule];
-		});
+		$defaultRules = collect( (new static())->getValidationRules() ?? [] )->mapWithKeys( function( $rule, $column ) {
+			return [$column => is_array( $rule ) && collect( $rule )->every( fn( $item ) => is_string( $item ) ) ? implode( '|', $rule ) : $rule];
+		} );
 
 		return static::getSchemaColumnRules()->merge($defaultRules)
 					 ->filter( function( $rules ) {
-						 if(is_string($rules)) {
-							 return Str::contains($rules, 'required');
+						 if( is_string( $rules ) ) {
+							 return Str::contains( $rules, 'required' ) && !Str::contains( $rules, 'sometimes' );
 						 }
-						 if(is_array($rules)) {
-							 return collect($rules)->contains('required');
+						 if( is_array( $rules ) ) {
+							 return collect( $rules )->contains( fn( $rule ) => is_string( $rule ) && Str::contains( $rule, 'required' ) ) &&
+									!collect( $rules )->contains( fn( $rule ) => is_string( $rule ) && Str::contains( $rule, 'sometimes' ) );
 						 }
 						 return true;
 					 } )
@@ -155,12 +156,16 @@ trait HasValidation {
 
 	public function getDefaultValidationAttributes(): array {
 		$modifiedAttributes = $this->getDirty();
-		return $this->exists
-			? $modifiedAttributes
-			: $this->getRequiredColumns()
-				   ->mapWithKeys( function( $column ) use( $modifiedAttributes )  {
-					   return [$column => $modifiedAttributes[$column] ?? null];
-				   } )
-				   ->toArray();
+
+		return $this->getRequiredColumns()
+					->mapWithKeys( function( $column ) use ( $modifiedAttributes ) {
+						$value = array_key_exists( $column, $modifiedAttributes )
+							? $modifiedAttributes[ $column ]
+							: ($this->exists ? $this->$column : null);
+
+						return [$column => $value];
+					} )
+					->merge( $modifiedAttributes )
+					->toArray();
 	}
 }
