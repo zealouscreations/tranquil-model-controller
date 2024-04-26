@@ -313,10 +313,13 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 							$inputCollection = collect( $input );
 							if( $inputCollection->pluck( $relatedPrimaryKey )->filter()->count() ) {
 								$pivotField = $model->$relatedColumn()->getPivotAccessor();
-								$input = $inputCollection->mapWithKeys( function( $item, $key ) use ( $pivotField, $relatedPrimaryKey ) {
+								$pivotColumns = $model->$relatedColumn()->getPivotColumns();
+								$input = $inputCollection->mapWithKeys( function( $item, $key ) use ( $pivotField, $pivotColumns, $relatedPrimaryKey ) {
 									$itemArray = (array) $item;
 									$id = $itemArray[$relatedPrimaryKey] ?? (is_numeric( $item ) ? $item : $key);
-									$pivotAttributes = isset($itemArray[ $pivotField ]) ? Arr::except($itemArray[ $pivotField ], ['errors']) : null;
+									$pivotAttributes = isset($itemArray[ $pivotField ])
+										? Arr::only( $itemArray[ $pivotField ], [$relatedPrimaryKey, ...$pivotColumns] )
+										: null;
 									return [$id => $pivotAttributes ?? $id];
 								} )->toArray();
 							}
@@ -775,7 +778,6 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 
 	public function getFilledModelArray( $model ): array {
 		return $model->makeHidden( [
-			'pivot',
 			'created_at',
 			'updated_at',
 			'deleted_at',
@@ -804,11 +806,23 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 							->mapWithKeys( fn( $item, $key ) => [$key => null] )
 							->toArray();
 		foreach( $withRelations as $relation ) {
+			$subRelations = explode( '.', $relation );
+			$relation = array_shift( $subRelations );
+			$returnEmptyRelation = Str::contains( $relation, ':empty' );
+			$relation = str_replace( ':empty', '', $relation );
 			if( method_exists( $model, $relation ) && is_a( $model->$relation(), Relation::class ) ) {
-				$emptyModel[ $relation ] = $this->getEmptyModelArray( get_class( $model->$relation()->getModel() ) );
+				$belongsToMany = is_a( $model->$relation(), BelongsToMany::class ) || is_a( $model->$relation(), MorphToMany::class );
+				$hasMany = is_a( $model->$relation(), HasMany::class ) || is_a( $model->$relation(), MorphMany::class );
+				$subRelations = implode( '.', $subRelations );
+				$emptyModelArray = $belongsToMany || ($hasMany && $returnEmptyRelation)
+					? []
+					: (
+					$returnEmptyRelation ? null :
+						$this->getEmptyModelArray( get_class( $model->$relation()->getModel() ), !empty( $subRelations ) ? [$subRelations] : [] )
+					);
+				$emptyModel[ $relation ] = $hasMany && !$returnEmptyRelation ? [$emptyModelArray] : $emptyModelArray;
 			}
 		}
-
 		return $emptyModel;
 	}
 

@@ -1037,7 +1037,7 @@ class TestControllerModel extends TranquilModel {
 		return $this->belongsTo(TestControllerBelongsToModel::class);
 	}
 	public function testControllerBelongsToManyModels() {
-		return $this->belongsToMany(TestControllerBelongsToModel::class, 'test_controller_belongs_to_model_test_controller_model');
+		return $this->belongsToMany(TestControllerBelongsToModel::class, 'test_controller_belongs_to_model_test_controller_model')->withPivot(['test_pivot_column']);
 	}
 }
 
