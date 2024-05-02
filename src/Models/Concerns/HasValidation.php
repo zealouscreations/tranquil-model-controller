@@ -42,6 +42,9 @@ trait HasValidation {
 	 */
 	public bool $validateOnSave = true;
 
+	private Collection $defaultRules;
+	private Collection $confirmedColumns;
+
 	protected static function bootHasValidation() {
 		static::saving(function(Model $model) {
 			if($model->validateOnSave) {
@@ -68,16 +71,16 @@ trait HasValidation {
 		$this->getValidator( $attributes )->validate();
 	}
 
-	public static function getAllValidationRules(): array {
-		return static::getValidationRulesForAttributes(
+	public function getAllValidationRules(): array {
+		return $this->getValidationRulesForAttributes(
 			static::getColumns()
 				  ->except([(new static())->getKeyName(), 'id', 'slug', 'created_at', 'updated_at', 'deleted_at', 'created_by', 'updated_by', 'deleted_by'])
 				  ->toArray()
 		);
 	}
 
-	public static function getValidationRulesForAttributes($attributes = []): array {
-		$defaultRules = (new static())->getValidationRules() ?? [];
+	public function getValidationRulesForAttributes( $attributes = [] ): array {
+		$defaultRules = $this->getValidationRules() ?? [];
 		$schemaRules = static::getSchemaColumnRules()
 							 ->filter( function( $rule, $column ) use ( $attributes ) {
 								 return array_key_exists( $column, $attributes );
@@ -101,12 +104,8 @@ trait HasValidation {
 			->toArray();
 	}
 
-	public static function getRequiredColumns(): Collection {
-		$defaultRules = collect( (new static())->getValidationRules() ?? [] )->mapWithKeys( function( $rule, $column ) {
-			return [$column => is_array( $rule ) && collect( $rule )->every( fn( $item ) => is_string( $item ) ) ? implode( '|', $rule ) : $rule];
-		} );
-
-		return static::getSchemaColumnRules()->merge($defaultRules)
+	public function getRequiredColumns(): Collection {
+		return static::getSchemaColumnRules()->merge( $this->getDefaultRules() )->merge( $this->getConfirmedColumns() )
 					 ->filter( function( $rules ) {
 						 if( is_string( $rules ) ) {
 							 return Str::contains( $rules, 'required' ) && !Str::contains( $rules, 'sometimes' );
@@ -118,6 +117,34 @@ trait HasValidation {
 						 return true;
 					 } )
 					 ->keys();
+	}
+
+	public function getDefaultRules(): Collection {
+		if( !isset( $this->defaultRules ) ) {
+			$this->defaultRules = collect( $this->getValidationRules() ?? [] )->mapWithKeys( function( $rule, $column ) {
+				return [$column => is_array( $rule ) && collect( $rule )->every( fn( $item ) => is_string( $item ) ) ? implode( '|', $rule ) : $rule,];
+			} );
+		}
+
+		return $this->defaultRules;
+	}
+
+	public function getConfirmedColumns(): Collection {
+		if( !isset( $this->confirmedColumns ) ) {
+			$this->confirmedColumns = $this->getDefaultRules()->mapWithKeys( function( $rules, $column ) {
+				$confirmed = false;
+				if( is_string( $rules ) ) {
+					$confirmed = Str::contains( $rules, 'confirmed' ) && !Str::contains( $rules, 'sometimes' );
+				}
+				if( is_array( $rules ) ) {
+					$confirmed = collect( $rules )->contains( fn( $rule ) => is_string( $rule ) && Str::contains( $rule, 'confirmed' ) ) &&
+								 !collect( $rules )->contains( fn( $rule ) => is_string( $rule ) && Str::contains( $rule, 'sometimes' ) );
+				}
+				return $confirmed ? [$column.'_confirmation' => 'required'] : [];
+			} )->filter();
+		}
+
+		return $this->confirmedColumns;
 	}
 
 	public static function getSchemaColumnRules(): Collection {
@@ -156,6 +183,11 @@ trait HasValidation {
 
 	public function getDefaultValidationAttributes(): array {
 		$modifiedAttributes = $this->getDirty();
+		$confirmationInputs = $this->getConfirmedColumns()->mapWithKeys( function( $item, $column ) {
+			$regularColumn = str_replace( '_confirmation', '', $column );
+			return [$column => request()->request->get( $column ) ?? (!$this->isDirty( $regularColumn ) ? $this->$regularColumn : null)];
+		} )->toArray();
+		$modifiedAttributes = array_merge( $confirmationInputs, $modifiedAttributes );
 
 		return $this->getRequiredColumns()
 					->mapWithKeys( function( $column ) use ( $modifiedAttributes ) {

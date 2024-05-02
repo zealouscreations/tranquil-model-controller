@@ -229,8 +229,9 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 		if ( in_array( HasValidation::class, class_uses_recursive( $model ) ) && !$model->validateOnSave ) {
 			$model->validate();
 		}
-		DB::transaction( function() use ( $request, $model ) {
-			$this->saveRelations( $request->input(), $model );
+		$self = $this;
+		DB::transaction( function() use ( $request, $model, $self ) {
+			$self->saveRelations( $request->input(), $model );
 			$model->save();
 			$this->saveAttachments( $request, $model );
 		} );
