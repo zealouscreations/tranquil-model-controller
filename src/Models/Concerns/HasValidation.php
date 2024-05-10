@@ -193,7 +193,7 @@ trait HasValidation {
 					->mapWithKeys( function( $column ) use ( $modifiedAttributes ) {
 						$value = array_key_exists( $column, $modifiedAttributes )
 							? $modifiedAttributes[ $column ]
-							: ($this->exists ? $this->$column : null);
+                            : ($this->exists ? ($this->getAttributes()[$column] ?? null) : null);
 
 						return [$column => $value];
 					} )

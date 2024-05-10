@@ -124,6 +124,9 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 
 	public string $modelNamespace = 'App\Models';
 
+    private bool $modelSavedFromRelations = false;
+    private bool $modelWasRecentlyCreated;
+
 	public function __construct() {
 		if( !isset( $this->modelClass ) ) {
 			$this->modelClass = str_replace( [$this->controllerNamespace, 'Controller'], [$this->modelNamespace, ''], get_class( $this ) );
@@ -232,11 +235,14 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 		$self = $this;
 		DB::transaction( function() use ( $request, $model, $self ) {
 			$self->saveRelations( $request->input(), $model );
-			$model->save();
+			if( !$this->modelSavedFromRelations ) {
+				$model->save();
+				$this->modelWasRecentlyCreated = $model->wasRecentlyCreated;
+			}
 			$this->saveAttachments( $request, $model );
 		} );
-		session()->flash('message', $model->wasRecentlyCreated ? $this->createdFlashMessage : $this->savedFlashMessage);
-		return $model->wasRecentlyCreated
+		session()->flash('message', $this->modelWasRecentlyCreated ? $this->createdFlashMessage : $this->savedFlashMessage);
+		return $this->modelWasRecentlyCreated
 			? $this->stored( $model->fresh() )
 			: $this->saved( $model->fresh() );
 	}
@@ -337,7 +343,9 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 		}
 		if( $createdAssociatedRelation || (!$model->exists && count( $relationsToCreate ) + count( $relationsToUpdateOrCreate ) + count( $relationsToSync ) > 0) ) {
 			$model->save();
+            $this->modelWasRecentlyCreated = $model->wasRecentlyCreated;
 			$model->wasRecentlyCreated = false;
+            $this->modelSavedFromRelations = true;
 		}
 		foreach($relationsToCreate as $relation) {
 			$relatedColumn = $relation['relatedColumn'];
