@@ -97,6 +97,14 @@ class ModelValidationTest extends TestCase {
 		$model->another_nullable_column = 'test';
 		$this->assertTrue($model->getValidator()->fails());
 	}
+
+	public function test_will_pass_validation_with_a_column_with_a_default_value_that_is_set_to_null() {
+		$model = new TestDefaultValidationModel(['required_column' => 'test', 'column_with_default'=>null]);
+		$this->assertTrue($model->getValidator()->passes());
+		$model->save();
+		$model->fresh()->fill(['column_with_default' => null]);
+		$this->assertTrue($model->getValidator()->passes());
+	}
 }
 
 enum TestEnum {
@@ -106,7 +114,7 @@ enum TestEnum {
 
 class TestValidationModel extends TranquilModel {
 	public $timestamps = false;
-	protected $fillable = ['required_column', 'nullable_column', 'another_nullable_column'];
+	protected $fillable = ['required_column', 'nullable_column', 'another_nullable_column', 'column_with_default'];
 }
 
 class TestSometimesValidationModel extends TestValidationModel {
@@ -123,4 +131,8 @@ class TestRequiredWithValidationModel extends TestValidationModel {
 	public array $validationRules = [
 		'nullable_column' => 'required_with:another_nullable_column',
 	];
+}
+
+class TestDefaultValidationModel extends TestValidationModel {
+	protected $table = 'test_validation_models';
 }

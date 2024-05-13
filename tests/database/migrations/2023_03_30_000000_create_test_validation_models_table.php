@@ -17,6 +17,7 @@ return new class extends Migration {
 			$table->string('required_column');
 			$table->string('nullable_column')->nullable();
 			$table->string('another_nullable_column')->nullable();
+			$table->boolean('column_with_default')->default(false);
 		});
 	}
 
