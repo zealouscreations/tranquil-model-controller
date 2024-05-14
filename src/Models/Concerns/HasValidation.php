@@ -150,26 +150,35 @@ trait HasValidation {
 	public static function getSchemaColumnRules(): Collection {
 		return Cache::remember( (new static())->getTable().'_schema_column_rules', 180, function() {
 			return collect( static::getColumns() )
-				->except( [(new static())->getKeyName(), 'id', 'slug', 'created_at', 'updated_at', 'deleted_at', 'created_by', 'updated_by', 'deleted_by'] )
-				->map( function( Column $schema, $column ) {
-					$required = $schema->getNotnull() ? ($schema->getDefault() === null ? 'required' : 'filled') : false;
+				->except( [(new static())->getKeyName(), 'id', 'slug', 'created_at', 'updated_at', 'deleted_at', 'created_by', 'updated_by', 'deleted_by', 'createdUserID', 'updatedUserID', 'deletedUserID'] )
+				->map( function( $schema ) {
+					$required = $schema->nullable ? false : ($schema->default === null ? 'required' : 'filled');
 					$nullable = !$required ? 'nullable' : false;
-					switch( $schema->getType()->getName() ) {
+					$schema->type_name = $schema->type == 'tinyint(1)' ? 'boolean' : $schema->type_name;
+					switch( $schema->type_name ) {
+						case 'int':
+						case 'tinyint':
+						case 'smallint':
+						case 'mediumint':
+						case 'bigint':
 						case 'integer':
 							$rule = 'integer';
 							break;
 						case 'float':
 						case 'double':
 						case 'decimal':
+						case 'number':
+						case 'numeric':
 							$rule = 'numeric';
 							break;
+						case 'bit':
 						case 'boolean':
 							$rule = 'boolean';
 							break;
 						default:
-							$rule = false;
+							$rule = 'string';
 					}
-					return !$required && !$rule ? false : implode( '|', array_filter( [$required, $nullable, $rule] ) );
+					return implode( '|', array_filter( [$required, $nullable, $rule] ) );
 				} )
 				->filter();
 		} );
