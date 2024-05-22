@@ -83,6 +83,8 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 	 */
 	public array $loadablePolicyRelations = [];
 
+	public bool $loadRecordsWithIndex = true;
+
 	/**
 	 * An array of the default parameters to be passed to the response for each response type.
 	 * @see ModelController::getDefaultResponseParameters()
@@ -182,24 +184,66 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 				$model->appendPolicies( $this->getLoadablePolicyRelations( responseType: $type ) );
 			}
 			$this->loadModelAppends( $model, $type );
+			$model = match ($type) {
+				'show' => $this->getShowResponseModel( $model ),
+				'edit' => $this->getEditResponseModel( $model ),
+				default => $model
+			};
 		}
 
 		return $model;
 	}
 
+	public function getShowResponseModel( $model ) {
+		return $model;
+	}
+
+	public function getEditResponseModel( $model ) {
+		return $model;
+	}
+
 	public function getResponseParameters( $type, $model, $parameters ): array {
+		$overrideParameters = match ($type) {
+			'index' => $this->getIndexResponseParameters(),
+			'show' => $this->getShowResponseParameters( $model ),
+			'create' => $this->getCreateResponseParameters(),
+			'edit' => $this->getEditResponseParameters( $model ),
+			default => []
+		};
 		$parameters = array_merge(
 			$parameters,
 			$this->getResponseParametersForType( $type ),
+			$overrideParameters,
 		);
 		if( in_array( $type, ['create', 'edit'] ) ) {
 			$parameters = array_merge( $parameters, $this->getCreateEditParametersWithModel( $model ) );
 		}
-		if( $type == 'index' && $this->canLoadPolices( $model ?? new $this->modelClass() ) ) {
-			$parameters['canCreate'] = auth()->user()->can( 'create', $model ?? new $this->modelClass() );
+		if( $type == 'index' ) {
+			if( $this->canLoadPolices( $model ?? new $this->modelClass() ) ) {
+				$parameters['canCreate'] = auth()->user()->can( 'create', $model ?? new $this->modelClass() );
+			}
+			if( $this->loadRecordsWithIndex ) {
+				$parameters[Str::plural( Str::camel( class_basename( $this->modelClass ) ) )] = $this->getRecords( request() )['records'];
+			}
 		}
 
 		return $parameters;
+	}
+
+	public function getIndexResponseParameters(): array {
+		return [];
+	}
+
+	public function getShowResponseParameters( $model ): array {
+		return [];
+	}
+
+	public function getCreateResponseParameters(): array {
+		return [];
+	}
+
+	public function getEditResponseParameters( $model ): array {
+		return [];
 	}
 
 	public function getLoadablePolicyRelations( ?Request $request = null, ?string $responseType = null ): array {

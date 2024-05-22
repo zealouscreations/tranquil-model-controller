@@ -21,9 +21,7 @@ trait TranquilResourceMethods {
 	 * Display a listing of the resource.
 	 */
 	public function index( Request $request ): Responsable|RedirectResponse|JsonResponse {
-		return $this->getResponse( type:'index', parameters:[
-			Str::plural( Str::camel( class_basename( $this->modelClass ) ) ) => $this->getRecords( $request )['records'],
-		] );
+		return $this->getResponse( 'index' );
 	}
 
 	/**
@@ -81,7 +79,7 @@ trait TranquilResourceMethods {
 	 * Retrieve the Model if it hasn't already been retrieved from the route binding
 	 */
 	protected function loadModel( $model ): Model {
-		return is_a( $model, Model::class ) ? $model : $this->modelClass::findOrFail( $model );
+		return is_a( $model, Model::class ) ? $model : $this->getModelQuery( request() )->findOrFail( $model );
 	}
 
 	/**
