@@ -21,7 +21,7 @@ trait TranquilResourceViewMethods {
 	 * Display a listing of the resource.
 	 */
 	public function index( Request $request ): Responsable|RedirectResponse|JsonResponse {
-		$this->checkModelPolicy( new $this->modelClass(), 'update' );
+		$this->checkModelPolicy( new $this->modelClass(), 'viewAny' );
 
 		return $this->getResponse( 'index' );
 	}
@@ -39,18 +39,20 @@ trait TranquilResourceViewMethods {
 	 * Display the specified resource.
 	 */
 	public function show( mixed $model ): Responsable|RedirectResponse|JsonResponse {
-		$this->checkModelPolicy( new $this->modelClass(), 'view' );
+		$model = $this->retrieveModel( $model );
+		$this->checkModelPolicy( $model, 'view' );
 
-		return $this->getResponse( 'show', $this->retrieveModel( $model ) );
+		return $this->getResponse( 'show', $model );
 	}
 
 	/**
 	 * Show the form for editing the specified resource.
 	 */
 	public function edit( mixed $model ): Responsable|JsonResponse {
-		$this->checkModelPolicy( new $this->modelClass(), 'update' );
+		$model = $this->retrieveModel( $model );
+		$this->checkModelPolicy( $model, 'update' );
 
-		return $this->getResponse( 'edit', $this->retrieveModel( $model ) );
+		return $this->getResponse( 'edit', $model );
 	}
 
 	public function authorizeResourceViewMethods(): void {
