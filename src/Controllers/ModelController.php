@@ -280,6 +280,7 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 	public function saveRelations( array $inputs, Model $model ): void {
 		$relationsToCreate = [];
 		$relationsToUpdateOrCreate = [];
+		$relationsToDelete = [];
 		$relationsToSync = [];
 		$createdAssociatedRelation = false;
 		foreach( $inputs as $relatedColumn => $input ) {
@@ -337,6 +338,14 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 						foreach( $input as $relationInput ) {
 							$relationsToUpdateOrCreate[] = compact( 'relatedColumn', 'foreignKey', 'relationInput' );
 						}
+                        $relatedModel = $model->$relatedColumn()->getModel();
+                        if( $model->exists && ($relatedModel::$deletableAsHasMany ?? false) && count($input) < $model->$relatedColumn()->count() ) {
+                            $relatedPrimaryKey = $relatedModel->getKeyName();
+                            $idsToDelete = $model->$relatedColumn()->whereNotIn($relatedPrimaryKey, collect($input)->pluck($relatedPrimaryKey))->pluck($relatedPrimaryKey)->toArray();
+                            if( count($idsToDelete) ) {
+                                $relationsToDelete[] = compact('relatedColumn', 'relatedPrimaryKey', 'idsToDelete');
+                            }
+                        }
 					}
 				}
 			}
@@ -354,6 +363,10 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 			$relatedModel = $model->$relatedColumn()->create( $relation['input'] );
 			$this->saveRelations( $relation['input'], $relatedModel );
 		}
+		foreach($relationsToDelete as $relation) {
+            $relatedColumn = $relation['relatedColumn'];
+            $model->$relatedColumn()->whereIn($relation['relatedPrimaryKey'], $relation['idsToDelete'])->delete();
+        }
 		foreach($relationsToUpdateOrCreate as $relation) {
 			$relatedColumn = $relation['relatedColumn'];
 			$input = (array) $relation['relationInput'];
@@ -649,6 +662,14 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 				}
 				$operator = strtolower( $filter['operator'] ?? '' );
 				$type = $filter['type'] ?? null;
+				if( !$type && !$rawColumn ) {
+					/** @var Model $model */
+					$model = (new $this->modelClass);
+					$model = $relation ? $model->$relation()->getModel() : $model;
+					if( in_array( HasColumnSchema::class, class_uses_recursive( $model ) ) ) {
+						$type = $model->getColumnType( $relation ? $column : $filter['column'] );
+					}
+				}
 				if( in_array( $operator, ['in', 'between'] ) && !in_array( $type, ['date', 'datetime'] ) ) {
 					$searchValue = $filter['value'];
 					$this->populateFilterQueryWhereClause( $query, $where, $relation, function( $query ) use ( $column, $where, $operator, $searchValue ) {
@@ -661,14 +682,6 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 						'contains',
 						'endsWith',
 					], 'like', $filter['operator'] ) : '=';
-					if( !$type && !$rawColumn ) {
-						/** @var Model $model */
-						$model = (new $this->modelClass);
-						$model = $relation ? $model->$relation()->getModel() : $model;
-						if( in_array( HasColumnSchema::class, class_uses_recursive( $model ) ) ) {
-							$type = $model->getColumnType( $relation ? $column : $filter['column'] );
-						}
-					}
 
 					if( $type == 'date' || $type == 'datetime' ) {
 
@@ -745,10 +758,12 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 		return class_exists( str_replace('Models', 'Policies', get_class( $model )) . 'Policy' );
 	}
 
-	public function checkModelPolicy( Model $model, $action ) {
-		$user = Auth::user() ?? new (config( 'auth.providers.users.model', TranquilUser::class ))();
-		if ( $this->modelHasPolicy( $model ) && $user->cannot( $action, $model ) ) {
-			abort( 403 );
+    /**
+     * @throws AuthorizationException
+     */
+    public function checkModelPolicy( Model $model, $action ): void {
+		if( $this->modelHasPolicy( $model ) ) {
+            $this->authorize( $action, $model );
 		}
 	}
 

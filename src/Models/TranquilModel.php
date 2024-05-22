@@ -18,6 +18,8 @@ class TranquilModel extends Model {
 
 	public static $snakeAttributes = false;
 
+	public static bool $deletableAsHasMany = false;
+
 	public static $appendsScopedToModel = null;
 	public static $scopedAppends = null;
 	public static $addedAppends = null;
