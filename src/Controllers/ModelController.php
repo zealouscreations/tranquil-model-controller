@@ -902,7 +902,7 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 	 * Retrieve the Model if it hasn't already been retrieved from the route binding
 	 */
 	protected function retrieveModel( $model ): Model {
-		return is_a( $model, Model::class ) ? $model : $this->modelClass::findOrFail( $model );
+		return is_a( $model, Model::class ) ? $model : $this->getModelQuery( request() )->findOrFail( $model );
 	}
 
 	public function redirectResponse( Request $request, Model $model = null ): bool|\Illuminate\Http\RedirectResponse {
