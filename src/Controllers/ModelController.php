@@ -7,6 +7,8 @@ use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphOne;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Tranquil\Models\Attachment;
 use Tranquil\Models\Concerns\HasAttachments;
 use Tranquil\Models\Concerns\HasColumnSchema;
@@ -121,6 +123,12 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 	 * The message to be flashed after a Model is deleted
 	 */
 	public string $deletedFlashMessage = 'Deleted';
+
+	/**
+	 * Populate this if the resource routes are prefixed
+	 * Be sure to include a trailing dot '.'
+	 */
+	public string $routeNamePrefix = '';
 
 	public string $controllerNamespace = 'App\Http\Controllers';
 
@@ -270,14 +278,13 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 	 */
 	public function save( Request $request, mixed $model ): bool|JsonResponse|Responsable|\Illuminate\Http\RedirectResponse {
 		/** @var $model Model */
-		if( $model->exists ) {
-			$this->checkModelPolicy( $model, 'update' );
-		}
+		$this->checkModelPolicy( $model, $model->exists ? 'update' : 'create' );
 		if ( in_array( HasValidation::class, class_uses_recursive( $model ) ) && !$model->validateOnSave ) {
 			$model->validate();
 		}
 		$self = $this;
 		DB::transaction( function() use ( $request, $model, $self ) {
+			$self->saveFiles( $request, $model );
 			$self->saveRelations( $request->input(), $model );
 			if( !$this->modelSavedFromRelations ) {
 				$model->save();
@@ -316,6 +323,19 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 			? $this->show( $model )
 			: $this->showResponse( $responseModel )
 		);
+	}
+
+	public function saveFiles( Request $request, Model $model ) {
+		foreach( $request->allFiles() as $column => $files ) {
+			if( $model::getColumns()->keys()->contains( $column ) ) {
+				if( isset( $model->$column ) && Storage::exists( $model->$column ) ) {
+					Storage::delete( $model->$column );
+				}
+				/** @var UploadedFile $file */
+				$file = is_array( $files ) ? collect( $files )->first() : $files;
+				$model->$column = $file->store( $model->storagePath ?? 'uploads/'.strtolower( class_basename( get_class( $model ) ) ).'/'.$model->getKey() );
+			}
+		}
 	}
 
 	/**
@@ -895,7 +915,7 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 	}
 
 	public function getRouteNameForAction( $modelClass, $action ): string {
-		return Str::kebab( Str::plural( class_basename( $modelClass ) ) ).'.'.$action;
+		return $this->routeNamePrefix.(Str::kebab( Str::plural( class_basename( $modelClass ) ) )).'.'.$action;
 	}
 
 	/**

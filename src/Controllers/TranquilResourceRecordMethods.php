@@ -23,9 +23,8 @@ trait TranquilResourceRecordMethods {
 	 */
 	public function update( Request $request, mixed $model ): JsonResponse|bool|\Inertia\Response|RedirectResponse {
 		$model = $this->retrieveModel( $model );
-		$this->checkModelPolicy( $model, 'update' );
 
-		return $this->save( $request, $model->fill( $request->all() ) );
+		return $this->save( $request, $model->fill( $request->input() ) );
 	}
 
 	/**
@@ -34,18 +33,13 @@ trait TranquilResourceRecordMethods {
 	 * @throws \Illuminate\Validation\ValidationException
 	 */
 	public function store( Request $request ): bool|JsonResponse|\Inertia\Response|RedirectResponse {
-		$model = new $this->modelClass( $request->all() );
-		$this->checkModelPolicy( $model, 'create' );
-
-		return $this->save( $request, $model );
+		return $this->save( $request, new $this->modelClass( $request->input() ) );
 	}
 
 	/**
 	 * Remove the specified resource from storage.
 	 */
 	public function destroy( Request $request, mixed $model ): JsonResponse|\Inertia\Response|RedirectResponse {
-		$this->checkModelPolicy( $model, 'delete' );
-
 		return $this->remove( $request, $this->retrieveModel( $model ) );
 	}
 
