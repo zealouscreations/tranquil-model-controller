@@ -164,7 +164,7 @@ trait HasPolicy {
 			foreach( $subRelations as $relation ) {
 				$relationModel = is_a( $relationModel, Collection::class )
 					? $relationModel->pluck( $relation )
-					: $relationModel->$relation;
+					: $relationModel?->$relation;
 				if( $relationModel ) {
 					if( is_a( $relationModel, \Illuminate\Support\Collection::class ) ) {
 						$relationModel->map->append( 'policy' );
