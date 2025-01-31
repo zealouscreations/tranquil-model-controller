@@ -2,6 +2,7 @@
 
 namespace Tranquil\Models;
 
+use Illuminate\Support\Collection;
 use Tranquil\Auth\AuthenticatableUser;
 use Tranquil\Exceptions\UserRoleOptionDoesNotExistException;
 use Illuminate\Database\Eloquent\Builder;
@@ -23,6 +24,7 @@ class TranquilUser extends AuthenticatableUser {
 			'description' => 'Has limited access',
 		],
 	];
+	public const roleOptionHandleKey = 'handle';
 
 	protected $guarded = ['id', 'created_at', 'updated_at', 'email_verified_at', 'remember_token'];
 
@@ -114,7 +116,7 @@ class TranquilUser extends AuthenticatableUser {
 	 */
 	public function addRole( $role ) {
 		if ( ! self::hasRoleOption( $role ) ) {
-			throw new UserRoleOptionDoesNotExistException( $role, self::roleOptions );
+			throw new UserRoleOptionDoesNotExistException( $role, self::getRoleOptions() );
 		}
 		$this->roles = collect( $this->roles )
 			->merge( is_array( $role ) ? $role : [ $role ] )
@@ -147,6 +149,10 @@ class TranquilUser extends AuthenticatableUser {
 		$this->removeRole( $roles );
 	}
 
+	public static function getRoleOptions(): Collection {
+		return collect( static::roleOptions );
+	}
+
 	/**
 	 * @param  string|array  $roleHandle
 	 *
@@ -157,11 +163,11 @@ class TranquilUser extends AuthenticatableUser {
 			return static::hasAllRoleOptions( $roleHandle );
 		}
 
-		return collect( static::roleOptions )->pluck( 'handle' )->contains( $roleHandle );
+		return static::getRoleOptions()->pluck( static::roleOptionHandleKey )->contains( $roleHandle );
 	}
 
 	public static function hasAllRoleOptions( array $roleHandles ): bool {
-		return ! array_diff( $roleHandles, collect( static::roleOptions )->pluck( 'handle' )->toArray() );
+		return ! array_diff( $roleHandles, static::getRoleOptions()->pluck( static::roleOptionHandleKey )->toArray() );
 	}
 
 	/**
