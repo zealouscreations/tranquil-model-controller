@@ -102,21 +102,21 @@ use Tranquil\Models\TranquilUser;
  *  - Add a query filter to the models query builder for only returning records that the authenticated user
  *    can take the specified `$action` on:
  *
- *  This requires a scope query method with the action name be added to the model policy.
+ * This requires a scope query method with the action name be added to the model policy.
  *
- *  <code>
- *  class CompanyPolicy {
- *      //...
- *      public function scopeView( Builder $companyQuery, User $user ): Builder {
- *          return $companyQuery->whereIn( 'companies.id', $user->companies->pluck( 'id' ) );
- *      }
- *  }
- *  </code>
- *
- * Then you can use the scope as such:
  * <code>
- *     Company::where('created_at', '>', '2024-01-01')->whereCan('view')->get()
+ *   class CompanyPolicy {
+ *       //...
+ *       public function scopeView( Builder $companyQuery, User $user ): Builder {
+ *          return $companyQuery->whereIn( 'companies.id', $user->companies->pluck( 'id' ) );
+ *       }
+ *   }
  * </code>
+ *
+ *  Then you can use the scope as such:
+ *  <code>
+ *     Company::where('created_at', '>', '2024-01-01')->whereCan('view')->get()
+ *  </code>
  *
  * Note: Using the `whereCan` query builder scope is more efficient for queries that return large amounts of records
  *
@@ -135,7 +135,7 @@ trait HasPolicy {
 
 	public function getPolicyAttribute(): array {
 		$user = Auth::user() ?? new (config( 'auth.providers.users.model', TranquilUser::class ))();
-		$policyMethods = collect( get_class_methods( 'App\\Policies\\'.class_basename( get_class( $this ) ).'Policy' ) )
+		$policyMethods = collect(get_class_methods(str_replace('Models', 'Policies', get_class($this)).'Policy'))
 			->diff( ['before', 'allow', 'deny'] )
 			->filter( fn( $method ) => !Str::startsWith( $method, 'scope' ) && !Str::startsWith( $method, '__' ) );
 
