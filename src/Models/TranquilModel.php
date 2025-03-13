@@ -6,11 +6,10 @@ namespace Tranquil\Models;
 
 use Tranquil\Models\Concerns\HasValidation;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 
 class TranquilModel extends Model {
 
-	use HasValidation, SoftDeletes;
+	use HasValidation;
 
 	protected $guarded = ['id', 'created_at', 'updated_at', 'deleted_at'];
 

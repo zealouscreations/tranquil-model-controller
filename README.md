@@ -2,7 +2,7 @@
 
 This package contains base Laravel Eloquent models and controllers that contain all the functionality you'll need for CRUD operations. Making Laravel development a more "Tranquil" experience.
 
-**Requires Laravel 10**
+**Compatible with Laravel 10, 11, and 12**
 
 ## Install
 
