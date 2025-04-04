@@ -10,6 +10,10 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 
+/**
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|self whereHasAllRoles($roles)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|self whereHasRole($role)
+ */
 class TranquilUser extends AuthenticatableUser {
 
 	public const roleOptions = [
@@ -94,18 +98,18 @@ class TranquilUser extends AuthenticatableUser {
 	}
 
 	/**
-	 * @param  string|array  $role
+	 * @param  mixed  $role
 	 *
 	 * @return bool
 	 */
 	public function hasRole( $role ): bool {
-		return collect( $this->roles )
-				   ->intersect( is_array( $role ) ? $role : [ $role ] )
-				   ->count() > 0;
+		return is_array( $role )
+			? collect( $role )->some( fn( $r ) => collect( $this->roles )->contains( $r ) )
+			: collect( $this->roles )->contains( $role );
 	}
 
 	public function hasAllRoles( array $roles ): bool {
-		return ! array_diff( $roles, $this->roles );
+		return collect( $roles )->every( fn( $role ) => collect( $this->roles )->contains( $role ) );
 	}
 
 	/**
@@ -196,15 +200,5 @@ class TranquilUser extends AuthenticatableUser {
 		foreach($roles as $role) {
 			$query->whereJsonContains('roles', $role);
 		}
-	}
-
-	/**
-	 * adminUsers()
-	 *
-	 * @param $query
-	 * @return void
-	 */
-	public function scopeAdminUsers( $query ) {
-		$query->whereHasRole( ['leader'] );
 	}
 }

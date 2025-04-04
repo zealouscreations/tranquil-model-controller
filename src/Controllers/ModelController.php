@@ -47,6 +47,14 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 	public string $modelClass;
 
 	/**
+	 * The name of the model's property when passing it to 'show' or 'edit' pages
+	 * @default Camel case of the $modelClass
+	 * @example \App\Models\AppUser => 'appUser'
+	 * @see ModelController::getModelPropName()
+	 */
+	public string $modelPropName;
+
+	/**
 	 * The query builder that will be used for fetching the list of model records
 	 * @see ModelController::getModelQuery()
 	 * @see ModelController::getModelRecordsQuery()
@@ -141,6 +149,10 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 		if( !isset( $this->modelClass ) ) {
 			$this->modelClass = str_replace( [$this->controllerNamespace, 'Controller'], [$this->modelNamespace, ''], get_class( $this ) );
 		}
+	}
+
+	public function getModelPropName( $model = null ): string {
+		return $this->modelPropName ?? Str::camel( class_basename( $model ?? $this->modelClass ) );
 	}
 
 	public function getResponse( string $type, $model = null, $parameters = [] ) {
@@ -858,7 +870,7 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 			$columns = $model
 				? $this->getFilledModelArray( $model )
 				: $this->getEmptyModelArray( $this->modelClass );
-			$parameters = array_merge($parameters, [Str::camel( class_basename( $this->modelClass ) ) => $columns]);
+			$parameters = array_merge($parameters, [$this->getModelPropName( $model ) => $columns]);
 		}
 
 		return $parameters;
@@ -948,10 +960,10 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 	}
 
 	public function showResponse( mixed $model, array $parameters = [] ): Responsable|JsonResponse {
-		return self::apiResponse( true, array_merge( [Str::camel( class_basename( $model ) ) => $model], $parameters ) );
+		return self::apiResponse( true, array_merge( [$this->getModelPropName( $model ) => $model], $parameters ) );
 	}
 
 	public function editResponse( mixed $model, $parameters = [] ): Responsable|JsonResponse {
-		return self::apiResponse( true, array_merge( [Str::camel( class_basename( $model ) ) => $model], $parameters ) );
+		return self::apiResponse( true, array_merge( [$this->getModelPropName( $model ) => $model], $parameters ) );
 	}
 }

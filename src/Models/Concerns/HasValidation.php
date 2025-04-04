@@ -151,24 +151,16 @@ trait HasValidation {
 		return Cache::remember( (new static())->getTable().'_schema_column_rules', 180, function() {
 			return collect( static::getColumns() )
 				->except( [(new static())->getKeyName(), 'id', 'slug', 'created_at', 'updated_at', 'deleted_at', 'created_by', 'updated_by', 'deleted_by'] )
-				->map( function( Column $schema, $column ) {
-					$required = $schema->getNotnull() ? ($schema->getDefault() === null ? 'required' : 'filled') : false;
+				->map( function( $schema, $column ) {
+					$required = !$schema['nullable'] ? ($schema['default'] === null ? 'required' : 'filled') : false;
 					$nullable = !$required ? 'nullable' : false;
-					switch( $schema->getType()->getName() ) {
-						case 'integer':
-							$rule = 'integer';
-							break;
-						case 'float':
-						case 'double':
-						case 'decimal':
-							$rule = 'numeric';
-							break;
-						case 'boolean':
-							$rule = 'boolean';
-							break;
-						default:
-							$rule = false;
-					}
+					$type = $column['type_name'] ?? '';
+					$rule = match (static::getColumnType($column)) {
+						substr($type, 0, 3).'eger' => 'integer',
+						'float', 'double', 'decimal', 'numeric' => 'numeric',
+						'boolean', 'bool' => 'boolean',
+						default => false,
+					};
 					return !$required && !$rule ? false : implode( '|', array_filter( [$required, $nullable, $rule] ) );
 				} )
 				->filter();

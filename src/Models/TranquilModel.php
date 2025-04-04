@@ -7,6 +7,10 @@ namespace Tranquil\Models;
 use Tranquil\Models\Concerns\HasValidation;
 use Illuminate\Database\Eloquent\Model;
 
+/**
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|self overrideAppends($appends)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|self withoutAppends()
+ */
 class TranquilModel extends Model {
 
 	use HasValidation;

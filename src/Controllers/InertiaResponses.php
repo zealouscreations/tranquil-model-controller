@@ -67,11 +67,11 @@ trait InertiaResponses {
 	}
 
 	public function showResponse( mixed $model, array $parameters = [] ): Responsable {
-		return Inertia::render( $this->getComponentPath( get_class( $model ), 'show' ), array_merge( [Str::camel( class_basename( $model ) ) => $model], $parameters ) );
+		return Inertia::render( $this->getComponentPath( get_class( $model ), 'show' ), array_merge( [$this->getModelPropName( $model ) => $model], $parameters ) );
 	}
 
 	public function editResponse( mixed $model, $parameters = [] ): Responsable {
-		return Inertia::render( $this->getComponentPath( get_class( $model ), 'edit' ), array_merge( [Str::camel( class_basename( $model ) ) => $model], $parameters ) );
+		return Inertia::render( $this->getComponentPath( get_class( $model ), 'edit' ), array_merge( [$this->getModelPropName( $model ) => $model], $parameters ) );
 	}
 
 	public function getComponentPath( string $modelClass, string $responseType ): string {
