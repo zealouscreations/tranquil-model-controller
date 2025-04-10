@@ -358,6 +358,7 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 		$relationsToUpdateOrCreate = [];
 		$relationsToDelete = [];
 		$relationsToSync = [];
+		$relationsToDisassociate = [];
 		$createdAssociatedRelation = false;
 		foreach( $inputs as $relatedColumn => $input ) {
 			if( is_array( $input ) && method_exists( $model, $relatedColumn ) && is_a( $model->$relatedColumn(), Relation::class ) ) {
@@ -410,17 +411,28 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 							$relationsToSync[] = compact( 'relatedColumn', 'input' );
 						}
 					} else {
-						$foreignKey = $hasMany ? $model->$relatedColumn()->getForeignKeyName() : null;
-						foreach( $input as $relationInput ) {
+						// hasMany
+						$foreignKey = $model->$relatedColumn()->getForeignKeyName();
+						$relatedModel = $model->$relatedColumn()->getModel();
+						$relatedPrimaryKey = $relatedModel->getKeyName();
+						$relationInputs = collect( $input )->map( function( $item ) use ( $relatedPrimaryKey ) {
+							return collect( $item )->map( function( $value, $key ) use ( $relatedPrimaryKey ) {
+								return is_numeric( $key ) && is_numeric( $value ) ? [$relatedPrimaryKey => $value] : $value;
+							} )->toArray();
+						} );
+						foreach( $relationInputs as $relationInput ) {
 							$relationsToUpdateOrCreate[] = compact( 'relatedColumn', 'foreignKey', 'relationInput' );
 						}
-                        $relatedModel = $model->$relatedColumn()->getModel();
-                        if( $model->exists && ($relatedModel::$deletableAsHasMany ?? false) && count($input) < $model->$relatedColumn()->count() ) {
-                            $relatedPrimaryKey = $relatedModel->getKeyName();
-                            $idsToDelete = $model->$relatedColumn()->whereNotIn($relatedPrimaryKey, collect($input)->pluck($relatedPrimaryKey))->pluck($relatedPrimaryKey)->toArray();
-                            if( count($idsToDelete) ) {
-                                $relationsToDelete[] = compact('relatedColumn', 'relatedPrimaryKey', 'idsToDelete');
-                            }
+                        if( $model->exists && count($input) < $model->$relatedColumn()->count() ) {
+							$relatedModels = $model->$relatedColumn()->whereNotIn( $relatedPrimaryKey, collect( $input )->pluck( $relatedPrimaryKey ) )->get();
+							if( $relatedModel::$deletableAsHasMany ?? false ) {
+								$idsToDelete = $relatedModels->pluck( $relatedPrimaryKey )->toArray();
+								if( count( $idsToDelete ) ) {
+									$relationsToDelete[] = compact( 'relatedColumn', 'relatedPrimaryKey', 'idsToDelete' );
+								}
+							} else {
+								$relationsToDisassociate[] = compact('relatedModels', 'foreignKey');
+							}
                         }
 					}
 				}
@@ -449,13 +461,39 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 			if( isset( $relation['foreignKey'] ) ) {
 				$input[ $relation['foreignKey'] ] = $model->getKey();
 			}
-			$relatedPrimaryKey = $model->$relatedColumn()->getModel()->getKeyName();
-			$relatedModel = $model->$relatedColumn()->updateOrCreate( [$relatedPrimaryKey => $input[$relatedPrimaryKey] ?? null], $input );
+			$relatedColumnModel = $model->$relatedColumn()->getModel();
+			$morphType = null;
+			if( method_exists( $model->$relatedColumn(), 'getMorphType' ) ) {
+				$morphType = $model->$relatedColumn()->getMorphType();
+				$input[ $morphType ] = get_class( $model );
+			}
+			$relatedPrimaryKey = $relatedColumnModel->getKeyName();
+			$relatedModel = null;
+			if(isset($input[$relatedPrimaryKey])) {
+				$relatedModelQuery = $relatedColumnModel->where( $relatedPrimaryKey, $input[ $relatedPrimaryKey ] );
+				if( $morphType ) {
+					$relatedModelQuery->where( $morphType, get_class( $model ) );
+				}
+				$relatedModel = $relatedModelQuery->first();
+			}
+			if($relatedModel) {
+				$relatedModel->fill($input);
+				$relatedModel->save();
+			} else {
+				$relatedModel = $relatedColumnModel->create($input);
+			}
 			$this->saveRelations( $input, $relatedModel );
 		}
 		foreach($relationsToSync as $relation) {
 			$relatedColumn = $relation['relatedColumn'];
 			$model->$relatedColumn()->sync($relation['input']);
+		}
+		foreach($relationsToDisassociate as $relation) {
+			$foreignKey = $relation['foreignKey'];
+			foreach($relation['relatedModels'] as $relatedModel) {
+				$relatedModel->$foreignKey = null;
+				$relatedModel->save();
+			}
 		}
 	}
 
