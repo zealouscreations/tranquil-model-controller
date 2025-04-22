@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 use Tranquil\Models\Attachment;
 use Tranquil\Models\Concerns\HasAttachments;
 use Tranquil\Models\Concerns\HasColumnSchema;
@@ -144,6 +145,7 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 
     private bool $modelSavedFromRelations = false;
     private bool $modelWasRecentlyCreated;
+	private array $relationValidationErrors = [];
 
 	public function __construct() {
 		if( !isset( $this->modelClass ) ) {
@@ -298,6 +300,9 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 		DB::transaction( function() use ( $request, $model, $self ) {
 			$self->saveFiles( $request, $model );
 			$self->saveRelations( $request->input(), $model );
+			if( !empty( $this->relationValidationErrors ) ) {
+				throw ValidationException::withMessages( $this->relationValidationErrors );
+			}
 			if( !$this->modelSavedFromRelations ) {
 				$model->save();
 				$this->modelWasRecentlyCreated = $model->wasRecentlyCreated;
@@ -368,27 +373,31 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 				$belongsToMany = is_a( $model->$relatedColumn(), BelongsToMany::class ) || is_a( $model->$relatedColumn(), MorphToMany::class );
 				$hasMany = is_a( $model->$relatedColumn(), HasMany::class ) || is_a( $model->$relatedColumn(), MorphMany::class );
 				if( $hasOne || $belongsTo ) {
-					if( isset( $model->$relatedColumn ) ) {
-						$model->$relatedColumn->fill( $input );
-						$model->$relatedColumn->save();
-						$this->saveRelations( $input, $model->$relatedColumn );
-					} else {
-						if( $hasOne ) {
-							$relationsToCreate[] = compact('relatedColumn', 'input');
+					try {
+						if( isset( $model->$relatedColumn ) ) {
+							$model->$relatedColumn->fill( $input );
+							$model->$relatedColumn->save();
+							$this->saveRelations( $input, $model->$relatedColumn );
 						} else {
-							if( isset( $input[$relatedPrimaryKey] ) ) {
-								$relatedModel = $model->$relatedColumn()->getModel()->where( $relatedPrimaryKey, $input[$relatedPrimaryKey] )->first();
-								$relatedModel->fill( $input );
-								$relatedModel->save();
+							if( $hasOne ) {
+								$relationsToCreate[] = compact( 'relatedColumn', 'input' );
 							} else {
-								$relatedModel = $model->$relatedColumn()->create( $input );
-							}
-							if( $relatedModel ) {
-								$model->$relatedColumn()->associate( $relatedModel );
-								$createdAssociatedRelation = true;
-								$this->saveRelations( $input, $relatedModel );
+								if( isset( $input[ $relatedPrimaryKey ] ) ) {
+									$relatedModel = $model->$relatedColumn()->getModel()->where( $relatedPrimaryKey, $input[ $relatedPrimaryKey ] )->first();
+									$relatedModel->fill( $input );
+									$relatedModel->save();
+								} else {
+									$relatedModel = $model->$relatedColumn()->create( $input );
+								}
+								if( $relatedModel ) {
+									$model->$relatedColumn()->associate( $relatedModel );
+									$createdAssociatedRelation = true;
+									$this->saveRelations( $input, $relatedModel );
+								}
 							}
 						}
+					} catch( ValidationException $exception ) {
+						$this->relationValidationErrors[ $relatedColumn ] = $exception->errors();
 					}
 				} else if( $belongsToMany || $hasMany ) {
 					if( $belongsToMany ) {
@@ -448,14 +457,20 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 			$relatedColumn = $relation['relatedColumn'];
 			$foreignKey = $model->$relatedColumn()->getForeignKeyName();
 			$relation['input'][ $foreignKey ] = $model->getKey();
-			$relatedModel = $model->$relatedColumn()->create( $relation['input'] );
-			$this->saveRelations( $relation['input'], $relatedModel );
+			try {
+				$relatedModel = $model->$relatedColumn()->create( $relation['input'] );
+			} catch( ValidationException $exception ) {
+				$this->relationValidationErrors[ $relatedColumn ] = [$exception->getMessage()];
+			}
+			if( isset( $relatedModel ) ) {
+				$this->saveRelations( $relation['input'], $relatedModel );
+			}
 		}
 		foreach($relationsToDelete as $relation) {
             $relatedColumn = $relation['relatedColumn'];
             $model->$relatedColumn()->whereIn($relation['relatedPrimaryKey'], $relation['idsToDelete'])->delete();
         }
-		foreach($relationsToUpdateOrCreate as $relation) {
+		foreach($relationsToUpdateOrCreate as $index => $relation) {
 			$relatedColumn = $relation['relatedColumn'];
 			$input = (array) $relation['relationInput'];
 			if( isset( $relation['foreignKey'] ) ) {
@@ -476,13 +491,19 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 				}
 				$relatedModel = $relatedModelQuery->first();
 			}
-			if($relatedModel) {
-				$relatedModel->fill($input);
-				$relatedModel->save();
-			} else {
-				$relatedModel = $relatedColumnModel->create($input);
+			try {
+				if( $relatedModel ) {
+					$relatedModel->fill( $input );
+					$relatedModel->save();
+				} else {
+					$relatedModel = $relatedColumnModel->create( $input );
+				}
+			} catch( ValidationException $exception ) {
+				$this->relationValidationErrors[ $relatedColumn.'_'.$index ] = [$exception->errors()];
 			}
-			$this->saveRelations( $input, $relatedModel );
+			if( $relatedModel ) {
+				$this->saveRelations( $input, $relatedModel );
+			}
 		}
 		foreach($relationsToSync as $relation) {
 			$relatedColumn = $relation['relatedColumn'];
