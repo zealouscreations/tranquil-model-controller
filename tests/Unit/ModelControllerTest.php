@@ -134,6 +134,188 @@ class ModelControllerTest extends TestCase {
 		$this->assertEquals($input['testControllerMorphOneModel']['title'], $testModel->testControllerMorphOneModel->title);
 	}
 
+	public function test_can_assign_has_one_model_to_a_model() {
+		$testModel1 = TestControllerBelongsToModel::create( [
+			'title' => 'Test Model 1',
+		] );
+
+		$hasOneModel = TestControllerModel::create( [
+			'title'                               => 'Test Has One Model',
+			'test_controller_belongs_to_model_id' => null,
+		] );
+
+		$input = [
+			'title'                     => 'Test Model 1 Updated',
+			'testControllerHasOneModel' => $hasOneModel->toArray(),
+		];
+
+		$this->controller->modelClass = TestControllerBelongsToModel::class;
+		$this->controller->save( new Request( $input ), $testModel1->fill( $input ) );
+
+		$this->assertDatabaseHas( 'test_controller_models', [
+			'title'                               => $input['testControllerHasOneModel']['title'],
+			'test_controller_belongs_to_model_id' => $testModel1->id,
+		] );
+
+		$testModel1 = $testModel1->fresh();
+
+		$this->assertNotNull( $testModel1->testControllerHasOneModel );
+		$this->assertEquals( $hasOneModel->title, $testModel1->testControllerHasOneModel->title );
+	}
+
+	public function test_can_change_has_one_model_to_different_model() {
+		$testModel1 = TestControllerBelongsToModel::create( [
+			'title' => 'Test Model 1',
+		] );
+		$testModel2 = TestControllerBelongsToModel::create( [
+			'title' => 'Test Model 2',
+		] );
+		$hasOneModel = TestControllerModel::create( [
+			'title'                               => 'Test Has One Model',
+			'test_controller_belongs_to_model_id' => $testModel1->id,
+		] );
+
+		$input = [
+			'title'                     => 'Test Model 2 Updated',
+			'testControllerHasOneModel' => $hasOneModel->toArray(),
+		];
+
+		$this->controller->modelClass = TestControllerBelongsToModel::class;
+		$this->controller->save( new Request( $input ), $testModel2->fill( $input ) );
+
+		$this->assertDatabaseHas( 'test_controller_models', [
+			'title'                               => $input['testControllerHasOneModel']['title'],
+			'test_controller_belongs_to_model_id' => $testModel2->id,
+		] );
+
+		$testModel1 = $testModel1->fresh();
+		$testModel2 = $testModel2->fresh();
+
+		$this->assertNull( $testModel1->testControllerHasOneModel );
+		$this->assertNotNull( $testModel2->testControllerHasOneModel );
+		$this->assertEquals( $hasOneModel->title, $testModel2->testControllerHasOneModel->title );
+	}
+
+	public function test_can_change_morph_one_model_to_different_model() {
+		$testModel1 = TestControllerMorphsToModel::create( [
+			'title' => 'Test Model 1',
+		] );
+		$testModel2 = TestControllerMorphsToModel::create( [
+			'title' => 'Test Model 2',
+		] );
+		$morphOneModel = TestControllerPolymorphicModel::create( [
+			'title'          => 'Test Morph One Model',
+			'morphable_id'   => $testModel1->id,
+			'morphable_type' => TestControllerMorphsToModel::class,
+		] );
+
+		$input = [
+			'title'                       => 'Test Model 2 Updated',
+			'testControllerMorphOneModel' => $morphOneModel->toArray(),
+
+		];
+
+		$this->controller->modelClass = TestControllerMorphsToModel::class;
+		$this->controller->save( new Request( $input ), $testModel2->fill( $input ) );
+
+		$this->assertDatabaseHas( 'test_controller_polymorphic_models', [
+			'title'          => $input['testControllerMorphOneModel']['title'],
+			'morphable_id'   => $testModel2->id,
+			'morphable_type' => TestControllerMorphsToModel::class,
+		] );
+
+		$testModel1 = $testModel1->fresh();
+		$testModel2 = $testModel2->fresh();
+
+		$this->assertNull( $testModel1->testControllerMorphOneModel );
+		$this->assertNotNull( $testModel2->testControllerMorphOneModel );
+		$this->assertEquals( $morphOneModel->title, $testModel2->testControllerMorphOneModel->title );
+	}
+
+	public function test_can_change_belongs_to_model_to_different_model() {
+		$testBelongsToModel1 = TestControllerBelongsToModel::create( [
+			'title' => 'Test Belongs To Model 1',
+		] );
+		$testBelongsToModel2 = TestControllerBelongsToModel::create( [
+			'title' => 'Test Belongs To Model 2',
+		] );
+		$testModel = TestControllerModel::create( [
+			'title'                               => 'Test Model',
+			'test_controller_belongs_to_model_id' => $testBelongsToModel1->id,
+		] );
+
+		$input = [
+			'title'                        => 'Test Updated Model',
+			'testControllerBelongsToModel' => $testBelongsToModel2->toArray(),
+		];
+
+		$this->controller->save( new Request( $input ), $testModel->fill( $input ) );
+
+		$this->assertDatabaseHas( 'test_controller_models', [
+			'title'                               => $input['title'],
+			'test_controller_belongs_to_model_id' => $testBelongsToModel2->id,
+		] );
+
+		$testModel = $testModel->fresh();
+
+		$this->assertEquals( $testBelongsToModel2->id, $testModel->test_controller_belongs_to_model_id );
+		$this->assertEquals( $testBelongsToModel2->title, $testModel->testControllerBelongsToModel->title );
+	}
+
+	public function test_can_disassociate_belongs_to_relationship() {
+		$testBelongsToModel = TestControllerBelongsToModel::create( [
+			'title' => 'Test Belongs To Model',
+		] );
+		$testModel = TestControllerModel::create( [
+			'title'                               => 'Test Model',
+			'test_controller_belongs_to_model_id' => $testBelongsToModel->id,
+		] );
+
+		$input = [
+			'title'                        => 'Test Updated Model',
+			'testControllerBelongsToModel' => ['id' => null],
+		];
+
+		$this->controller->save( new Request( $input ), $testModel->fill( $input ) );
+
+		$this->assertDatabaseHas( 'test_controller_models', [
+			'title'                               => $input['title'],
+			'test_controller_belongs_to_model_id' => null,
+		] );
+
+		$testModel = $testModel->fresh();
+
+		$this->assertNull( $testModel->test_controller_belongs_to_model_id );
+		$this->assertNull( $testModel->testControllerBelongsToModel );
+	}
+
+	public function test_can_disassociate_has_one_relationship() {
+		$testModel = TestControllerBelongsToModel::create( [
+			'title' => 'Test Model',
+		] );
+		$hasOneModel = TestControllerModel::create( [
+			'title'                               => 'Test Has One Model',
+			'test_controller_belongs_to_model_id' => $testModel->id,
+		] );
+
+		$input = [
+			'title'                     => 'Test Updated Model',
+			'testControllerHasOneModel' => ['id' => null],
+		];
+
+		$this->controller->modelClass = TestControllerBelongsToModel::class;
+		$this->controller->save( new Request( $input ), $testModel->fill( $input ) );
+
+		$this->assertDatabaseHas( 'test_controller_models', [
+			'title'                               => $hasOneModel->title,
+			'test_controller_belongs_to_model_id' => null,
+		] );
+
+		$testModel = $testModel->fresh();
+		$this->assertNull( $testModel->testControllerHasOneModel );
+	}
+
+
 	public function test_can_create_a_belongs_to_model_when_creating_a_model() {
 		$input = [
 			'title'                        => 'Test Model',

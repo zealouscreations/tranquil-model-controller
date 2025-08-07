@@ -201,4 +201,11 @@ class TranquilUser extends AuthenticatableUser {
 			$query->whereJsonContains('roles', $role);
 		}
 	}
+
+	public function toArray(): array {
+		return [
+			...parent::toArray(),
+			'modelClass' => get_class( $this ),
+		];
+	}
 }

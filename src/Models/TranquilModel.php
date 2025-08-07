@@ -69,4 +69,11 @@ class TranquilModel extends Model {
 		$this->appends = array_merge( is_array( $appends ) ? $appends : [$appends], $this->appends );
 		return $this;
 	}
+
+	public function toArray(): array {
+		return [
+			...parent::toArray(),
+			'modelClass' => get_class( $this ),
+		];
+	}
 }

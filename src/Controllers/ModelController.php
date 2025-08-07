@@ -5,6 +5,7 @@ namespace Tranquil\Controllers;
 use Illuminate\Contracts\Support\Responsable;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphOne;
+use Illuminate\Database\Eloquent\Relations\MorphOneOrMany;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Http\UploadedFile;
@@ -367,23 +368,62 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 		$createdAssociatedRelation = false;
 		foreach( $inputs as $relatedColumn => $input ) {
 			if( is_array( $input ) && method_exists( $model, $relatedColumn ) && is_a( $model->$relatedColumn(), Relation::class ) ) {
-				$relatedPrimaryKey = $model->$relatedColumn()->getModel()->getKeyName();
-				$hasOne = is_a( $model->$relatedColumn(), HasOne::class ) || is_a( $model->$relatedColumn(), MorphTo::class ) || is_a( $model->$relatedColumn(), MorphOne::class );
-				$belongsTo = is_a( $model->$relatedColumn(), BelongsTo::class );
+				$isMorph = is_a( $model->$relatedColumn(), MorphTo::class ) || is_a( $model->$relatedColumn(), MorphToMany::class ) || is_a( $model->$relatedColumn(), MorphOneOrMany::class );
+				$hasOne = is_a( $model->$relatedColumn(), HasOne::class ) || is_a( $model->$relatedColumn(), MorphOne::class );
+				$belongsTo = is_a( $model->$relatedColumn(), BelongsTo::class ) || is_a( $model->$relatedColumn(), MorphTo::class );
 				$belongsToMany = is_a( $model->$relatedColumn(), BelongsToMany::class ) || is_a( $model->$relatedColumn(), MorphToMany::class );
 				$hasMany = is_a( $model->$relatedColumn(), HasMany::class ) || is_a( $model->$relatedColumn(), MorphMany::class );
+				$relatedModelClass = $isMorph && isset($input['modelClass']) ? $input['modelClass'] : get_class($model->$relatedColumn()->getModel());
+				$relatedPrimaryKey = (new $relatedModelClass)->getKeyName();
+				$relatedModel = isset($input[ $relatedPrimaryKey ]) ? $relatedModelClass::where( $relatedPrimaryKey, $input[ $relatedPrimaryKey ] )->first() : null;
 				if( $hasOne || $belongsTo ) {
 					try {
 						if( isset( $model->$relatedColumn ) ) {
-							$model->$relatedColumn->fill( $input );
-							$model->$relatedColumn->save();
-							$this->saveRelations( $input, $model->$relatedColumn );
+							if( !array_key_exists($relatedPrimaryKey, $input) || $model->$relatedColumn[ $relatedPrimaryKey ] == $input[ $relatedPrimaryKey ] ) {
+								$model->$relatedColumn->fill( $input );
+								$model->$relatedColumn->save();
+							} else {
+								if( $relatedModel ) {
+									if ($belongsTo) {
+										$model->$relatedColumn()->associate($relatedModel);
+									} else {
+										// For HasOne relationships, we need to update the foreign key
+										$foreignKey = $model->$relatedColumn()->getForeignKeyName();
+										$relatedModel->$foreignKey = $model->getKey();
+										$relatedModel->save();
+									}
+								} else {
+									if ($belongsTo) {
+										$model->$relatedColumn()->dissociate();
+									} else {
+										// For HasOne relationships, we need to set the foreign key to null
+										$currentRelated = $model->$relatedColumn;
+										if ($currentRelated) {
+											$foreignKey = $model->$relatedColumn()->getForeignKeyName();
+											$currentRelated->$foreignKey = null;
+											$currentRelated->save();
+										}
+									}
+
+								}
+								$createdAssociatedRelation = true;
+							}
+							if( $model->$relatedColumn ) {
+								$this->saveRelations( $input, $model->$relatedColumn );
+							}
 						} else {
 							if( $hasOne ) {
-								$relationsToCreate[] = compact( 'relatedColumn', 'input' );
+								if( $relatedModel ) {
+									// For HasOne relationships, we need to update the foreign key
+									$foreignKey = $model->$relatedColumn()->getForeignKeyName();
+									$relatedModel->$foreignKey = $model->getKey();
+									$relatedModel->save();
+									$createdAssociatedRelation = true;
+								} else {
+									$relationsToCreate[] = compact( 'relatedColumn', 'input' );
+								}
 							} else {
-								if( isset( $input[ $relatedPrimaryKey ] ) ) {
-									$relatedModel = $model->$relatedColumn()->getModel()->where( $relatedPrimaryKey, $input[ $relatedPrimaryKey ] )->first();
+								if( $relatedModel ) {
 									$relatedModel->fill( $input );
 									$relatedModel->save();
 								} else {
