@@ -4,6 +4,8 @@ This package contains base Laravel Eloquent models and controllers that contain 
 
 **Compatible with Laravel 10, 11, and 12**
 
+[Full Documentation](https://tranquil-model-controller.zealouscreations.com/)
+
 ## Install
 
 ### Require it with composer
