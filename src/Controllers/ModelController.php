@@ -332,7 +332,7 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 		$routeName = $this->getRouteNameForAction( get_class( $model ), 'show' );
 		$redirect = $this->redirectResponse( request(), $responseModel ) ?: (
 		Route::has( $routeName )
-			? redirect()->route( $routeName, [Str::camel( class_basename( $model ) ) => $responseModel] )
+			? redirect()->route( $routeName, [Str::snake( class_basename( $model ) ) => $responseModel] )
 			: false
 		);
 
@@ -1043,7 +1043,7 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 
 		return $request->redirectUrl
 			? redirect( $request->redirectUrl )
-			: redirect()->route( $request->redirectRoute, $request->redirectParameters ?? ( $model ? [Str::camel( class_basename( $model ) ) => $model] : [] ) );
+			: redirect()->route( $request->redirectRoute, $request->redirectParameters ?? ( $model ? [Str::snake( class_basename( $model ) ) => $model] : [] ) );
 	}
 
 	public static function apiResponse(bool $success, $data = [], $message = ''): JsonResponse {
