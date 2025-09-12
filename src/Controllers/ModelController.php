@@ -427,7 +427,7 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 									$relatedModel->fill( $input );
 									$relatedModel->save();
 								} else {
-									$relatedModel = $model->$relatedColumn()->create( $input );
+									$relatedModel = $relatedModelClass::create( $input );
 								}
 								if( $relatedModel ) {
 									$model->$relatedColumn()->associate( $relatedModel );
