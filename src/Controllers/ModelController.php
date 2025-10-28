@@ -644,7 +644,7 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 	 *
 	 * Optional request parameters:
 	 * <code>$request->select</code> -- string|array -- for selecting specific columns<br>
-	 * <code>$request->orderBy</code> -- string -- for ordering records by column(s)<br>
+	 * <code>$request->orderBy</code> -- string -- for ordering records by column(s): can use raw sql or relational dot notation<br>
 	 * <code>$request->where</code> -- array -- a single where clause to add to the query Builder<br>
 	 * <code>$request->relations</code> -- array -- for eager loading related models<br>
 	 * <code>$request->scopes</code> -- array -- for using model query scopes
@@ -662,7 +662,42 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 			$this->addQueryFilters( $query, $request->search );
 		}
 		if( $request->orderBy ) {
-			$query->orderByRaw( $request->orderBy );
+			$spaceCount = substr_count( $request->orderBy, ' ' );
+			// if there are multiple spaces, we assume the orderBy is a raw query
+			if( $spaceCount < 2 && $lastDotPosition = strrpos( $request->orderBy, '.' ) ) {
+				[$orderBy, $direction] = explode( ' ', $request->orderBy ) + [null, null];
+				$relationModel = new $this->modelClass();
+				$orderByQuery = DB::query();
+				$orderByColumn = substr( $orderBy, $lastDotPosition + 1 );
+				$orderByRelations = collect( explode( '.', substr( $orderBy, 0, $lastDotPosition ) ) )->map( function( $relation ) use ( &$relationModel ) {
+					$relation = $relationModel->$relation();
+					$relationModel = $relation->getModel();
+
+					return $relation;
+				} );
+				$model = new $this->modelClass();
+				$previousRelation = $model->clone();;
+				foreach( $orderByRelations->reverse()->values() as $index => $relation ) {
+					$relatedTable = $relation->getRelated()->getTable();
+					if( $index == 0 ) {
+						$orderByQuery->select( "$relatedTable.$orderByColumn" )->from( $relatedTable );
+					} else {
+						$orderByQuery->join( $relatedTable, $relatedTable.'.'.$previousRelation->getForeignKeyName(), '=', $previousRelation->getRelated()->getTable().'.'.$previousRelation->getOwnerKeyName() );
+						if( $index + 1 == $orderByRelations->count() ) {
+							$related = $relation->getRelated();
+							$orderByQuery->whereColumn( $model->getTable().'.'.$relation->getForeignKeyName(), $related->getTable().'.'.$relation->getOwnerKeyName() );
+						}
+					}
+					$previousRelation = $relation;
+				}
+				if( strtolower( $direction ?? 'asc' ) == 'desc' ) {
+					$query->orderByDesc( $orderByQuery );
+				} else {
+					$query->orderBy( $orderByQuery );
+				}
+			} else {
+				$query->orderByRaw( $request->orderBy );
+			}
 		}
 		if( $request->where ) {
 			$query->where( $request->where );
