@@ -437,7 +437,7 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 							}
 						}
 					} catch( ValidationException $exception ) {
-						$this->relationValidationErrors[ $relatedColumn ] = $exception->errors();
+						$this->relationValidationErrors[ $relatedColumn ] = [$exception->errors()];
 					}
 				} else if( $belongsToMany || $hasMany ) {
 					if( $belongsToMany ) {
