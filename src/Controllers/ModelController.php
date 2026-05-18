@@ -572,8 +572,12 @@ class ModelController extends Controller implements ResourceResponsesInterface {
 				}
 			}
 			if( !empty( $request->file( 'files' ) ) ) {
-				foreach( $request->file( 'files' ) as $file ) {
-					$attachment = new Attachment( $request->attachmentParameters ?? [] );
+				$filesInput = $request->input('files', []);
+				foreach( $request->file( 'files' ) as $index => $file ) {
+					$attachment = new Attachment( [
+						...($filesInput[ $index ] ?? []),
+						...[$request->attachmentParameters[ $index ] ?? $request->attachmentParameters ?? []]
+					] );
 					$attachment->storeFile( $file['file'] );
 					$model->attachments()->save( $attachment );
 				}

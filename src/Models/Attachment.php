@@ -3,13 +3,39 @@
 namespace Tranquil\Models;
 
 use Illuminate\Database\Eloquent\Casts\Attribute;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 
+/**
+ * @property int $id
+ * @property \Illuminate\Support\Carbon $created_at
+ * @property \Illuminate\Support\Carbon $updated_at
+ * @property \Illuminate\Support\Carbon $deleted_at
+ * @property string $file_name
+ * @property string $file_path
+ * @property int $file_size
+ * @property string $category
+ * @property array $labels
+ * @property string $title
+ * @property int $attachable_id
+ * @property string $attachable_type
+ * @property \Illuminate\Database\Eloquent\Model $attachable
+ * @property-read  string $url {@see Attachment::url()}
+ * @property-read  string $readableSize {@see Attachment::readableSize()}
+ */
 class Attachment extends TranquilModel {
 
-	use HasFactory;
+	use SoftDeletes;
+
+	public $timestamps = true;
+	public static bool $deletableAsHasMany = true;
+
+	protected $fillable = [
+		'category',
+		'labels',
+		'title',
+	];
 
 	const contentCategoryOptions = [
 		[
@@ -41,6 +67,10 @@ class Attachment extends TranquilModel {
 				}
 			}
 		});
+
+		static::forceDeleting( function( Attachment $attachment ) {
+			Storage::delete( $attachment->file_path );
+		} );
 	}
 
 	public function attachable(): \Illuminate\Database\Eloquent\Relations\MorphTo {
@@ -75,12 +105,17 @@ class Attachment extends TranquilModel {
 		);
 	}
 
-	public function storeFile( UploadedFile $file ) {
+	public function storeFile( UploadedFile $file ): void {
 		$this->file_name = $file->getClientOriginalName();
 		$this->file_size = $file->getSize();
 		$this->file_path = $file->store( 'attachments' );
 		$this->save();
 		$this->fresh();
+	}
+
+	public function replaceFile( UploadedFile $file ): void {
+		Storage::delete( $this->file_path );
+		$this->storeFile( $file );
 	}
 
 	/**
