@@ -60,7 +60,7 @@ class Attachment extends TranquilModel {
 		parent::boot();
 
 		static::saving(function(Attachment $attachment) {
-			if(!$attachment->wasRecentlyCreated && $attachment->isDirty('file_name')) {
+			if(!$attachment->wasRecentlyCreated && $attachment->isDirty('file_name') && $attachment->getOriginal('file_name')) {
 				$extension = pathinfo($attachment->getOriginal('file_name'), PATHINFO_EXTENSION);
 				if($extension && !str_ends_with($attachment->file_name, '.'.$extension)) {
 					$attachment->file_name .= '.'.$extension;
