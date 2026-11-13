@@ -2,7 +2,7 @@
 
 This package contains base Laravel Eloquent models and controllers that contain all the functionality you'll need for CRUD operations. Making Laravel development a more "Tranquil" experience.
 
-**Compatible with Laravel 10, 11, and 12**
+**Compatible with Laravel 10 and newer (tested through Laravel 13)**
 
 [Full Documentation](https://tranquil-model-controller.zealouscreations.com/)
 

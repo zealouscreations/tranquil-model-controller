@@ -3,8 +3,8 @@
 Tranquil Model Controller is distributed as a Laravel package.
 
 Requirements
-- PHP compatible with Laravel 10–12
-- Laravel 10, 11, or 12
+- PHP version required by your Laravel release (8.1+ for Laravel 10, 8.3+ for Laravel 13)
+- Laravel 10 or newer (tested through Laravel 13)
 
 Install
 1. Require the package via Composer:
